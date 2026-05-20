@@ -15,7 +15,7 @@ import os
 import sqlite3
 from datetime import datetime, timezone
 
-from flask import Flask, redirect, render_template, request, url_for, Response
+from flask import Flask, flash, get_flashed_messages, redirect, render_template, request, url_for, Response
 
 BASE_DIR     = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR     = os.path.join(BASE_DIR, "data")
@@ -30,6 +30,23 @@ _PROF_CSV_P1   = os.path.join(DATA_DIR, "medical_professional_matches.csv")
 PROF_CSV       = _PROF_CSV_P2 if os.path.exists(_PROF_CSV_P2) else _PROF_CSV_P1
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY", "npi-review-dev-only")
+
+
+def _safe_int(value, default, allowed=None):
+    try:
+        n = int(value)
+    except (ValueError, TypeError):
+        return default
+    if allowed is not None and n not in allowed:
+        return default
+    return n
+
+
+def _safe_back(url, fallback="/"):
+    if url and url.startswith("/") and not url.startswith("//"):
+        return url
+    return fallback
 
 
 # ---------------------------------------------------------------------------
@@ -225,13 +242,51 @@ def build_stats():
                 counts["PENDING"] += 1
         return counts
 
+    def count_pending_high(groups, hhl_type):
+        count = 0
+        for hhl_id, g in groups.items():
+            if (hhl_id, hhl_type) in decisions:
+                continue
+            if g["candidates"] and g["candidates"][0].get("confidence") == "HIGH":
+                count += 1
+        return count
+
     return {
         "center_confidence":      count_confidence(centers, "center"),
         "center_decisions":       count_decisions(centers, "center"),
         "center_total":           len(centers),
+        "center_pending_high":    count_pending_high(centers, "center"),
         "prof_confidence":        count_confidence(professionals, "professional"),
         "prof_decisions":         count_decisions(professionals, "professional"),
         "prof_total":             len(professionals),
+        "prof_pending_high":      count_pending_high(professionals, "professional"),
+    }
+
+
+def get_progress(groups, decisions, hhl_type):
+    total    = len(groups)
+    approved = rejected = flagged = 0
+    for hhl_id in groups:
+        d = decisions.get((hhl_id, hhl_type))
+        if d:
+            dec = d["decision"]
+            if dec == "APPROVED":   approved += 1
+            elif dec == "REJECTED": rejected += 1
+            elif dec == "FLAGGED":  flagged  += 1
+    reviewed = approved + rejected + flagged
+    pct      = round(reviewed / total * 100) if total else 0
+    scale    = lambda n: round(n / total * 100, 1) if total else 0
+    return {
+        "total":        total,
+        "pending":      total - reviewed,
+        "approved":     approved,
+        "rejected":     rejected,
+        "flagged":      flagged,
+        "reviewed":     reviewed,
+        "pct":          pct,
+        "pct_approved": scale(approved),
+        "pct_rejected": scale(rejected),
+        "pct_flagged":  scale(flagged),
     }
 
 
@@ -308,14 +363,13 @@ def centers():
     filter_state = request.args.get("state", "all")
     search       = request.args.get("q", "").strip()
     sort         = request.args.get("sort", "conf")
-    per_page     = int(request.args.get("per_page", 50))
-    page         = int(request.args.get("page", 1))
-    if per_page not in (50, 100, 250, 999999):
-        per_page = 50
+    per_page     = _safe_int(request.args.get("per_page"), 50, {50, 100, 250, 999999})
+    page         = max(1, _safe_int(request.args.get("page"), 1))
 
     items           = _build_items(groups, decisions, "center", filter_conf, filter_dec, search, filter_state, sort)
     states          = _all_states(groups)
     approved_by_npi = get_approved_by_npi("center", groups)
+    progress        = get_progress(groups, decisions, "center")
     total           = len(items)
     start           = (page - 1) * per_page
     paged           = items[start:start + per_page]
@@ -324,7 +378,7 @@ def centers():
         items=paged, total=total, page=page, per_page=per_page,
         filter_conf=filter_conf, filter_dec=filter_dec,
         filter_state=filter_state, search=search, sort=sort, states=states,
-        approved_by_npi=approved_by_npi)
+        approved_by_npi=approved_by_npi, progress=progress)
 
 
 @app.route("/professionals")
@@ -336,14 +390,13 @@ def professionals():
     filter_state = request.args.get("state", "all")
     search       = request.args.get("q", "").strip()
     sort         = request.args.get("sort", "conf")
-    per_page     = int(request.args.get("per_page", 50))
-    page         = int(request.args.get("page", 1))
-    if per_page not in (50, 100, 250, 999999):
-        per_page = 50
+    per_page     = _safe_int(request.args.get("per_page"), 50, {50, 100, 250, 999999})
+    page         = max(1, _safe_int(request.args.get("page"), 1))
 
     items           = _build_items(groups, decisions, "professional", filter_conf, filter_dec, search, filter_state, sort)
     states          = _all_states(groups)
     approved_by_npi = get_approved_by_npi("professional", groups)
+    progress        = get_progress(groups, decisions, "professional")
     total           = len(items)
     start           = (page - 1) * per_page
     paged           = items[start:start + per_page]
@@ -352,7 +405,7 @@ def professionals():
         items=paged, total=total, page=page, per_page=per_page,
         filter_conf=filter_conf, filter_dec=filter_dec,
         filter_state=filter_state, search=search, sort=sort, states=states,
-        approved_by_npi=approved_by_npi)
+        approved_by_npi=approved_by_npi, progress=progress)
 
 
 @app.route("/approved")
@@ -407,10 +460,8 @@ def decisions_page():
         counts[label] = sum(1 for d in all_decisions.values() if d["decision"] == dec)
     counts["all"] = sum(counts.values())
 
-    per_page = int(request.args.get("per_page", 50))
-    if per_page not in (25, 50, 100, 250, 999999):
-        per_page = 50
-    page  = int(request.args.get("page", 1))
+    per_page = _safe_int(request.args.get("per_page"), 50, {25, 50, 100, 250, 999999})
+    page     = max(1, _safe_int(request.args.get("page"), 1))
     total = len(rows)
     start = (page - 1) * per_page
     paged = rows[start:start + per_page]
@@ -421,11 +472,12 @@ def decisions_page():
 
 @app.route("/undecide/<hhl_type>/<hhl_id>", methods=["POST"])
 def undecide(hhl_type, hhl_id):
-    back = request.form.get("back", "/decisions")
+    back = _safe_back(request.form.get("back"), "/decisions")
     conn = get_decisions_conn()
     conn.execute("DELETE FROM decisions WHERE hhl_id = ? AND hhl_type = ?", (hhl_id, hhl_type))
     conn.commit()
     conn.close()
+    flash("Decision removed.", "info")
     return redirect(back)
 
 
@@ -434,16 +486,20 @@ def decide(hhl_type, hhl_id):
     decision  = request.form.get("decision")
     nppes_npi = request.form.get("nppes_npi", "")
     notes     = request.form.get("notes", "")
-    back      = request.form.get("back", f"/{hhl_type}s")
+    back      = _safe_back(request.form.get("back"), f"/{hhl_type}s")
 
     if decision in ("APPROVED", "REJECTED", "FLAGGED"):
         save_decision(hhl_id, hhl_type, nppes_npi, decision, notes)
+        labels = {"APPROVED": "Match confirmed.", "REJECTED": "Marked no match.", "FLAGGED": "Flagged for review."}
+        flash(labels[decision], decision.lower())
 
     return redirect(back)
 
 
 @app.route("/bulk-approve/<hhl_type>", methods=["POST"])
 def bulk_approve(hhl_type):
+    if hhl_type not in ("center", "professional"):
+        return redirect(url_for("index"))
     groups    = get_centers() if hhl_type == "center" else get_professionals()
     decisions = get_all_decisions()
     approved  = 0
@@ -457,6 +513,8 @@ def bulk_approve(hhl_type):
             save_decision(hhl_id, hhl_type, npi, "APPROVED", "auto bulk-approved HIGH confidence")
             approved += 1
 
+    label = "center" if hhl_type == "center" else "professional"
+    flash(f"Bulk approved {approved} HIGH confidence {label}{'s' if approved != 1 else ''}.", "approved")
     return redirect(f"/{hhl_type}s?dec=APPROVED")
 
 
