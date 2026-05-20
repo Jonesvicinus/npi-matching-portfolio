@@ -1,0 +1,279 @@
+{% extends "base.html" %}
+{% block title %}Professionals — NPI Review{% endblock %}
+{% block content %}
+
+{% macro conf_badge(conf) %}
+  {% if conf == "HIGH" %}<span class="px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-800">HIGH</span>
+  {% elif conf == "MEDIUM" %}<span class="px-2 py-0.5 rounded text-xs font-semibold bg-yellow-100 text-yellow-800">MEDIUM</span>
+  {% elif conf == "LOW" %}<span class="px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-800">LOW</span>
+  {% else %}<span class="px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-600">{{ conf }}</span>{% endif %}
+{% endmacro %}
+
+<div class="flex items-center justify-between mb-4">
+  <h1 class="text-2xl font-bold">Medical Professionals</h1>
+  <span class="text-gray-500 text-sm">{{ total }} records</span>
+</div>
+
+<!-- Filters -->
+<form method="get" action="/professionals" class="bg-white border border-gray-200 rounded-lg p-3 mb-4 text-sm space-y-2">
+  <div class="flex flex-wrap gap-2 items-center">
+    <input type="text" name="q" value="{{ search }}" placeholder="Search by name…"
+           class="border border-gray-300 rounded px-2 py-1 text-sm w-52 focus:outline-none focus:border-blue-400">
+    <select name="state" class="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:border-blue-400">
+      <option value="all" {% if filter_state == 'all' %}selected{% endif %}>All states</option>
+      {% for s in states %}<option value="{{ s }}" {% if filter_state == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+    </select>
+    <select name="sort" class="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:border-blue-400">
+      <option value="conf"  {% if sort == 'conf'  %}selected{% endif %}>Sort: Confidence</option>
+      <option value="score" {% if sort == 'score' %}selected{% endif %}>Sort: Match Score</option>
+      <option value="name"  {% if sort == 'name'  %}selected{% endif %}>Sort: Name A–Z</option>
+      <option value="state" {% if sort == 'state' %}selected{% endif %}>Sort: State</option>
+    </select>
+    <select name="per_page" class="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:border-blue-400">
+      {% for n in [50, 100, 250] %}
+        <option value="{{ n }}" {% if per_page == n %}selected{% endif %}>{{ n }} per page</option>
+      {% endfor %}
+      <option value="999999" {% if per_page == 999999 %}selected{% endif %}>Show all</option>
+    </select>
+    <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">Apply</button>
+    <a href="/professionals" class="text-gray-400 hover:text-gray-600 text-xs">Reset</a>
+    <input type="hidden" name="conf" value="{{ filter_conf }}">
+    <input type="hidden" name="dec"  value="{{ filter_dec }}">
+  </div>
+  <div class="flex flex-wrap gap-4">
+    <div class="flex items-center gap-1.5">
+      <span class="text-gray-500 text-xs">Confidence:</span>
+      {% for c in ["all","HIGH","MEDIUM","LOW","NO_MATCH"] %}
+        <a href="/professionals?conf={{ c }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}"
+           class="px-2 py-0.5 rounded border text-xs {% if filter_conf == c %}bg-blue-600 text-white border-blue-600{% else %}border-gray-300 hover:border-blue-400{% endif %}">{{ c }}</a>
+      {% endfor %}
+    </div>
+    <div class="flex items-center gap-1.5">
+      <span class="text-gray-500 text-xs">Decision:</span>
+      {% for d in ["all","PENDING","APPROVED","REJECTED","FLAGGED"] %}
+        <a href="/professionals?conf={{ filter_conf }}&dec={{ d }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}"
+           class="px-2 py-0.5 rounded border text-xs {% if filter_dec == d %}bg-blue-600 text-white border-blue-600{% else %}border-gray-300 hover:border-blue-400{% endif %}">{{ d }}</a>
+      {% endfor %}
+    </div>
+  </div>
+</form>
+
+{% if not items %}
+  <p class="text-gray-500 py-8 text-center">No records match the current filters.</p>
+{% endif %}
+
+{% for item in items %}
+{% set decided = item.decision %}
+{% set top = item.candidates[0] if item.candidates else none %}
+
+<div class="bg-white border border-gray-200 rounded-lg mb-3 overflow-hidden">
+
+  {% if decided %}
+  <!-- ── DECIDED: compact summary row ── -->
+  <details class="group">
+    <summary class="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 list-none flex-wrap">
+      <span class="font-semibold text-sm">{{ item.meta.hhl_name }}</span>
+      {% if item.meta.hhl_type %}<span class="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded">{{ item.meta.hhl_type }}</span>{% endif %}
+      <span class="text-gray-400 text-xs">{{ item.meta.hhl_center_name }} · {{ item.meta.hhl_state }}</span>
+      <div class="ml-auto flex items-center gap-2">
+        {% if decided.decision == "APPROVED" and top %}
+          <span class="text-xs text-gray-600">{{ top.nppes_first_name }} {{ top.nppes_last_name }}{% if top.nppes_npi %} &middot; <span class="font-mono">{{ top.nppes_npi }}</span>{% endif %}</span>
+          <span class="px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-800">APPROVED</span>
+        {% elif decided.decision == "REJECTED" %}
+          <span class="px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-800">REJECTED</span>
+        {% elif decided.decision == "FLAGGED" %}
+          <span class="px-2 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-800">FLAGGED</span>
+        {% endif %}
+        <form action="/undecide/professional/{{ item.hhl_id }}" method="post" class="inline">
+          <input type="hidden" name="back" value="/professionals?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&page={{ page }}">
+          <button type="submit" onclick="return confirm('Remove decision for {{ item.meta.hhl_name }}?')"
+                  class="text-xs px-2 py-0.5 rounded border border-gray-300 text-gray-500 hover:border-red-300 hover:text-red-600">Undo</button>
+        </form>
+        <span class="text-gray-300 text-xs">▾</span>
+      </div>
+    </summary>
+
+    <!-- Expanded detail -->
+    <div class="border-t border-gray-100">
+      {% if not item.candidates %}
+        <div class="px-4 py-3 text-sm text-gray-500">No NPPES candidates found.</div>
+      {% else %}
+        {% for cand in item.candidates %}
+        <div class="px-4 py-3 {% if not loop.first %}border-t border-gray-100{% endif %} flex items-start gap-4">
+          <div class="text-center w-10 shrink-0">
+            <div class="text-lg font-bold text-gray-400">#{{ cand.rank }}</div>
+            <div class="text-xs text-gray-400">{{ cand.match_score }}</div>
+            {{ conf_badge(cand.confidence) }}
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="font-medium text-sm">{{ cand.nppes_first_name }} {{ cand.nppes_last_name }}{% if cand.nppes_credential %}<span class="text-gray-500">, {{ cand.nppes_credential }}</span>{% endif %}</div>
+            <div class="text-xs text-gray-500 mt-0.5">NPI: <span class="font-mono">{{ cand.nppes_npi }}</span>{% if cand.nppes_taxonomy_code %} · {{ cand.nppes_taxonomy_code }}{% endif %}</div>
+            {% if cand.nppes_address %}<div class="text-xs text-gray-500 mt-0.5">{{ cand.nppes_address }}, {{ cand.nppes_city }}, {{ cand.nppes_state }} {{ cand.nppes_zip }}</div>{% endif %}
+            {% if cand.signals_matched %}
+            <div class="text-xs mt-1.5 flex gap-1 flex-wrap">
+              {% for sig in cand.signals_matched.split('|') %}<span class="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded font-mono">✓ {{ sig }}</span>{% endfor %}
+            </div>
+            {% endif %}
+          </div>
+          <div class="shrink-0 flex flex-col gap-1.5 items-end">
+            {% if decided.nppes_npi == cand.nppes_npi %}<span class="text-xs text-green-700 font-medium">✓ Selected</span>{% endif %}
+            <a href="/provider/{{ cand.nppes_npi }}" target="_blank" class="text-xs text-center px-3 py-1.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-50">Profile</a>
+          </div>
+        </div>
+        {% endfor %}
+      {% endif %}
+    </div>
+  </details>
+
+  {% else %}
+  <!-- ── PENDING: full review view ── -->
+
+  <!-- Header -->
+  <div class="flex items-center gap-3 px-4 py-3 border-b border-gray-100 bg-gray-50 flex-wrap">
+    <span class="font-semibold text-sm">{{ item.meta.hhl_name }}</span>
+    {% if item.meta.hhl_type %}<span class="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded">{{ item.meta.hhl_type }}</span>{% endif %}
+    <span class="text-gray-400 text-xs">{{ item.meta.hhl_center_name }} · {{ item.meta.hhl_state }}</span>
+    {% if item.meta.hhl_email %}<span class="text-gray-400 text-xs">{{ item.meta.hhl_email }}</span>{% endif %}
+    <div class="ml-auto flex items-center gap-2">
+      {{ conf_badge(item.top_conf) }}
+      <span class="px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-700">PENDING</span>
+    </div>
+  </div>
+
+  {% if not item.candidates %}
+    <div class="px-4 py-3 text-sm text-gray-500">No NPPES candidates found.</div>
+    <div class="px-4 py-2 border-t border-gray-100 bg-gray-50 flex gap-2">
+      <form action="/decide/professional/{{ item.hhl_id }}" method="post" class="flex gap-2">
+        <input type="hidden" name="back" value="/professionals?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&page={{ page }}">
+        <input type="hidden" name="nppes_npi" value="">
+        <button name="decision" value="FLAGGED" class="text-xs px-3 py-1.5 rounded border border-orange-300 text-orange-700 hover:bg-orange-50">Flag for Review</button>
+        <button name="decision" value="REJECTED" class="text-xs px-3 py-1.5 rounded border border-red-300 text-red-700 hover:bg-red-50">No Match Found</button>
+      </form>
+    </div>
+
+  {% else %}
+    {% set best = item.candidates[0] %}
+
+    <!-- Top candidate — highlighted -->
+    <div class="px-4 py-4 {% if best.confidence == 'HIGH' %}bg-green-50 border-l-4 border-green-400{% elif best.confidence == 'MEDIUM' %}bg-yellow-50 border-l-4 border-yellow-400{% else %}bg-white border-l-4 border-gray-200{% endif %}">
+      <div class="flex items-start gap-4">
+        <div class="text-center w-10 shrink-0">
+          <div class="text-xs font-bold text-gray-400 uppercase mb-1">Best</div>
+          <div class="text-xs text-gray-400">{{ best.match_score }}</div>
+          {{ conf_badge(best.confidence) }}
+        </div>
+
+        <div class="flex-1 min-w-0">
+          <div class="font-semibold text-sm">
+            {{ best.nppes_first_name }} {{ best.nppes_last_name }}
+            {% if best.nppes_credential %}<span class="text-gray-500 font-normal">, {{ best.nppes_credential }}</span>{% endif %}
+          </div>
+          <div class="text-xs text-gray-500 mt-0.5">
+            NPI: <span class="font-mono">{{ best.nppes_npi }}</span>
+            {% if best.nppes_taxonomy_code %} · {{ best.nppes_taxonomy_code }}{% endif %}
+          </div>
+          {% if best.nppes_address %}<div class="text-xs text-gray-500 mt-0.5">{{ best.nppes_address }}, {{ best.nppes_city }}, {{ best.nppes_state }} {{ best.nppes_zip }}</div>{% endif %}
+          {% if best.nppes_phone %}<div class="text-xs text-gray-500">{{ best.nppes_phone }}</div>{% endif %}
+          {% if best.signals_matched %}
+          <div class="text-xs mt-1.5 flex gap-1 flex-wrap">
+            {% for sig in best.signals_matched.split('|') %}<span class="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded font-mono">✓ {{ sig }}</span>{% endfor %}
+          </div>
+          {% endif %}
+        </div>
+
+        <div class="shrink-0 flex flex-col gap-1.5 items-end">
+          <a href="/provider/{{ best.nppes_npi }}" target="_blank" class="text-xs text-center px-3 py-1.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-50">Profile</a>
+          {% if best.nppes_npi in approved_by_npi %}
+            {% for dup in approved_by_npi[best.nppes_npi] %}
+              {% if dup.hhl_id != item.hhl_id %}
+                <span class="text-xs text-amber-700 bg-amber-50 border border-amber-300 rounded px-2 py-0.5">⚠ Already approved for {{ dup.name }}</span>
+              {% endif %}
+            {% endfor %}
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Unified action bar -->
+      <div class="mt-3 pt-3 border-t border-black/5 flex items-center gap-2 flex-wrap">
+        <form action="/decide/professional/{{ item.hhl_id }}" method="post" class="flex gap-2 items-center">
+          <input type="hidden" name="back" value="/professionals?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&page={{ page }}">
+          <input type="hidden" name="nppes_npi" value="{{ best.nppes_npi }}">
+          <button name="decision" value="APPROVED" class="text-sm px-4 py-1.5 rounded bg-green-600 text-white hover:bg-green-700 font-medium">✓ Confirm Match</button>
+        </form>
+        <form action="/decide/professional/{{ item.hhl_id }}" method="post" class="flex gap-2 items-center">
+          <input type="hidden" name="back" value="/professionals?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&page={{ page }}">
+          <input type="hidden" name="nppes_npi" value="">
+          <input type="text" name="notes" placeholder="Notes (optional)" class="text-xs border border-gray-300 rounded px-2 py-1.5 w-44">
+          <button name="decision" value="FLAGGED" class="text-xs px-3 py-1.5 rounded border border-orange-300 text-orange-700 hover:bg-orange-50">Flag for Review</button>
+          <button name="decision" value="REJECTED" class="text-xs px-3 py-1.5 rounded border border-red-300 text-red-700 hover:bg-red-50">No Match Found</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Additional candidates (collapsed) -->
+    {% if item.candidates|length > 1 %}
+    <details class="border-t border-gray-100">
+      <summary class="px-4 py-2 text-xs text-gray-400 hover:text-gray-600 cursor-pointer list-none hover:bg-gray-50">
+        ▾ {{ item.candidates|length - 1 }} more candidate{{ 's' if item.candidates|length > 2 }}
+      </summary>
+      {% for cand in item.candidates[1:] %}
+      <div class="px-4 py-3 border-t border-gray-100 flex items-start gap-4">
+        <div class="text-center w-10 shrink-0">
+          <div class="text-lg font-bold text-gray-300">#{{ cand.rank }}</div>
+          <div class="text-xs text-gray-400">{{ cand.match_score }}</div>
+          {{ conf_badge(cand.confidence) }}
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="font-medium text-sm text-gray-700">
+            {{ cand.nppes_first_name }} {{ cand.nppes_last_name }}
+            {% if cand.nppes_credential %}<span class="text-gray-500">, {{ cand.nppes_credential }}</span>{% endif %}
+          </div>
+          <div class="text-xs text-gray-500 mt-0.5">NPI: <span class="font-mono">{{ cand.nppes_npi }}</span>{% if cand.nppes_taxonomy_code %} · {{ cand.nppes_taxonomy_code }}{% endif %}</div>
+          {% if cand.nppes_address %}<div class="text-xs text-gray-500 mt-0.5">{{ cand.nppes_address }}, {{ cand.nppes_city }}, {{ cand.nppes_state }} {{ cand.nppes_zip }}</div>{% endif %}
+          {% if cand.signals_matched %}
+          <div class="text-xs mt-1 flex gap-1 flex-wrap">
+            {% for sig in cand.signals_matched.split('|') %}<span class="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded font-mono">✓ {{ sig }}</span>{% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        <div class="shrink-0 flex flex-col gap-1.5 items-end">
+          {% if cand.nppes_npi in approved_by_npi %}
+            {% for dup in approved_by_npi[cand.nppes_npi] %}
+              {% if dup.hhl_id != item.hhl_id %}
+                <span class="text-xs text-amber-700 bg-amber-50 border border-amber-300 rounded px-2 py-0.5">⚠ Already approved for {{ dup.name }}</span>
+              {% endif %}
+            {% endfor %}
+          {% endif %}
+          <form action="/decide/professional/{{ item.hhl_id }}" method="post">
+            <input type="hidden" name="back" value="/professionals?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&page={{ page }}">
+            <input type="hidden" name="nppes_npi" value="{{ cand.nppes_npi }}">
+            <button name="decision" value="APPROVED" class="text-xs px-3 py-1.5 rounded bg-green-600 text-white hover:bg-green-700">Approve #{{ cand.rank }}</button>
+          </form>
+          <a href="/provider/{{ cand.nppes_npi }}" target="_blank" class="text-xs text-center px-3 py-1.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-50">Profile</a>
+        </div>
+      </div>
+      {% endfor %}
+    </details>
+    {% endif %}
+
+  {% endif %}
+  {% endif %}{# end decided/pending #}
+</div>
+{% endfor %}
+
+{% set qs = "conf=" ~ filter_conf ~ "&dec=" ~ filter_dec ~ "&state=" ~ filter_state ~ "&sort=" ~ sort ~ "&per_page=" ~ per_page ~ "&q=" ~ search %}
+{% if total > per_page %}
+<div class="flex gap-2 mt-4 justify-center text-sm items-center">
+  {% if page > 1 %}
+    <a href="/professionals?{{ qs }}&page={{ page - 1 }}" class="px-3 py-1.5 border border-gray-300 rounded hover:bg-gray-50">← Prev</a>
+  {% endif %}
+  <span class="px-3 py-1.5 text-gray-500">Page {{ page }} of {{ ((total - 1) // per_page) + 1 }} &nbsp;({{ total }} records)</span>
+  {% if page * per_page < total %}
+    <a href="/professionals?{{ qs }}&page={{ page + 1 }}" class="px-3 py-1.5 border border-gray-300 rounded hover:bg-gray-50">Next →</a>
+  {% endif %}
+</div>
+{% else %}
+<p class="text-center text-xs text-gray-400 mt-4">{{ total }} records</p>
+{% endif %}
+
+{% endblock %}

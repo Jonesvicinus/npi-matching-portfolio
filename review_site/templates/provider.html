@@ -1,0 +1,344 @@
+{% extends "base.html" %}
+{% block title %}
+  {% if nppes %}{{ nppes.org_name or (nppes.first_name ~ ' ' ~ nppes.last_name) }} — Profile{% else %}Provider {{ npi }}{% endif %}
+{% endblock %}
+{% block content %}
+
+{% if not nppes %}
+  <div class="bg-yellow-50 border border-yellow-200 rounded p-4 text-yellow-800">
+    NPI <span class="font-mono">{{ npi }}</span> not found in local database.
+    Make sure <code>build_local_db.py</code> has been run.
+  </div>
+{% else %}
+
+{% set display_name = nppes.org_name or (nppes.first_name ~ ' ' ~ (nppes.last_name or '')) %}
+
+<!-- Page header -->
+<div class="flex items-start justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-bold">{{ display_name }}</h1>
+    {% if nppes.credential %}<span class="text-gray-500 text-sm">{{ nppes.credential }}</span>{% endif %}
+    <div class="text-gray-400 text-sm mt-1">NPI: <span class="font-mono">{{ npi }}</span></div>
+  </div>
+  <div class="text-right text-sm text-gray-500">
+    {% if hhl %}<span class="inline-block px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs font-medium mb-1">HHL Confirmed</span><br>{% endif %}
+    {% if nppes.entity_type == 1 %}Individual Provider
+    {% elif nppes.entity_type == 2 %}Organization
+    {% endif %}
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+
+  <!-- HHL Data -->
+  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+    <div class="px-4 py-3 bg-blue-50 border-b border-blue-100">
+      <h2 class="font-semibold text-blue-900">HHL Data</h2>
+      <p class="text-xs text-blue-600">From HHL campaign records</p>
+    </div>
+    <div class="px-4 py-4 space-y-3 text-sm">
+      {% if hhl %}
+        {% if hhl.hhl_name %}
+        <div class="flex justify-between">
+          <span class="text-gray-500">Name</span>
+          <span class="font-medium">{{ hhl.hhl_name }}</span>
+        </div>
+        {% endif %}
+        {% if hhl.get('hhl_email') %}
+        <div class="flex justify-between">
+          <span class="text-gray-500">Email</span>
+          <a href="mailto:{{ hhl.hhl_email }}" class="text-blue-600 hover:underline">{{ hhl.hhl_email }}</a>
+        </div>
+        {% endif %}
+        {% if hhl.get('hhl_center_name') %}
+        <div class="flex justify-between">
+          <span class="text-gray-500">Medical Center</span>
+          <span>{{ hhl.hhl_center_name }}</span>
+        </div>
+        {% endif %}
+        {% if hhl.get('hhl_type') %}
+        <div class="flex justify-between">
+          <span class="text-gray-500">Professional Type</span>
+          <span>{{ hhl.hhl_type }}</span>
+        </div>
+        {% endif %}
+        {% if hhl.hhl_state %}
+        <div class="flex justify-between">
+          <span class="text-gray-500">State</span>
+          <span>{{ hhl.hhl_state }}</span>
+        </div>
+        {% endif %}
+        {% if hhl.get('hhl_url') %}
+        <div class="flex justify-between">
+          <span class="text-gray-500">URL</span>
+          <a href="{{ hhl.hhl_url }}" target="_blank" class="text-blue-600 hover:underline truncate max-w-xs">{{ hhl.hhl_url }}</a>
+        </div>
+        {% endif %}
+      {% else %}
+        <p class="text-gray-400 italic">No HHL record linked to this NPI.</p>
+        <p class="text-xs text-gray-400">This provider appears in NPPES but has not been approved through the review site.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- NPPES Data -->
+  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+    <div class="px-4 py-3 bg-gray-50 border-b border-gray-200">
+      <h2 class="font-semibold text-gray-900">NPPES Data</h2>
+      <p class="text-xs text-gray-500">From National Provider Identifier registry</p>
+    </div>
+    <div class="px-4 py-4 space-y-3 text-sm">
+
+      <div class="flex justify-between">
+        <span class="text-gray-500">NPI</span>
+        <span class="font-mono font-medium">{{ npi }}</span>
+      </div>
+
+      {% if nppes.enumeration_date %}
+      <div class="flex justify-between">
+        <span class="text-gray-500">Enumeration Date</span>
+        <span>{{ nppes.enumeration_date }}</span>
+      </div>
+      {% endif %}
+
+      {% if nppes.last_update_date %}
+      <div class="flex justify-between">
+        <span class="text-gray-500">Last Updated</span>
+        <span>{{ nppes.last_update_date }}</span>
+      </div>
+      {% endif %}
+
+      <div class="flex justify-between">
+        <span class="text-gray-500">NPI Type</span>
+        <span>{% if nppes.entity_type == 1 %}Type 1 — Individual{% elif nppes.entity_type == 2 %}Type 2 — Organization{% else %}{{ nppes.entity_type }}{% endif %}</span>
+      </div>
+
+      {% if nppes.is_sole_proprietor %}
+      <div class="flex justify-between">
+        <span class="text-gray-500">Sole Proprietor</span>
+        <span>{{ nppes.is_sole_proprietor }}</span>
+      </div>
+      {% endif %}
+
+      <div class="flex justify-between">
+        <span class="text-gray-500">Status</span>
+        <span class="{% if not nppes.deactivation_date %}text-green-700 font-medium{% else %}text-red-600{% endif %}">
+          {% if not nppes.deactivation_date %}Active{% else %}Deactivated {{ nppes.deactivation_date }}{% endif %}
+        </span>
+      </div>
+
+      {% if nppes.mailing_address1 %}
+      <div>
+        <span class="text-gray-500 block mb-1">Mailing Address</span>
+        <span class="text-gray-800">{{ nppes.mailing_address1 }}, {{ nppes.mailing_city }}, {{ nppes.mailing_state }} {{ nppes.mailing_zip }}</span>
+      </div>
+      {% endif %}
+
+      {% if nppes.practice_address1 %}
+      <div>
+        <span class="text-gray-500 block mb-1">Primary Practice Address</span>
+        <span class="text-gray-800">{{ nppes.practice_address1 }}, {{ nppes.practice_city }}, {{ nppes.practice_state }} {{ nppes.practice_zip }}</span>
+        {% if nppes.practice_phone %}<div class="text-gray-500">{{ nppes.practice_phone }}</div>{% endif %}
+      </div>
+      {% endif %}
+
+      {% if nppes.parent_org_name %}
+      <div class="flex justify-between">
+        <span class="text-gray-500">Parent Organization</span>
+        <span>{{ nppes.parent_org_name }}</span>
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+
+</div>
+
+<!-- Secondary Practice Locations -->
+{% if nppes.practice_locations %}
+<div class="bg-white border border-gray-200 rounded-lg overflow-hidden mb-6">
+  <div class="px-4 py-3 bg-gray-50 border-b border-gray-200">
+    <h2 class="font-semibold text-gray-900">Secondary Practice Locations</h2>
+  </div>
+  <div class="divide-y divide-gray-100">
+    {% for loc in nppes.practice_locations %}
+    <div class="px-4 py-3 text-sm text-gray-700">
+      {{ loc.address1 }}{% if loc.address2 %}, {{ loc.address2 }}{% endif %},
+      {{ loc.city }}, {{ loc.state }} {{ loc.zip }}
+      {% if loc.phone %} · {{ loc.phone }}{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Taxonomy -->
+{% if nppes.taxonomies %}
+<div class="bg-white border border-gray-200 rounded-lg overflow-hidden mb-6">
+  <div class="px-4 py-3 bg-gray-50 border-b border-gray-200">
+    <h2 class="font-semibold text-gray-900">Taxonomy</h2>
+  </div>
+  <div class="divide-y divide-gray-100">
+    {% for tax in nppes.taxonomies %}
+    <div class="px-4 py-2.5 text-sm flex items-center gap-3">
+      <span class="font-mono text-gray-700">{{ tax.taxonomy_code }}</span>
+      {% if tax.is_primary %}<span class="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">Primary</span>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Other Names -->
+{% if nppes.other_names %}
+<div class="bg-white border border-gray-200 rounded-lg overflow-hidden mb-6">
+  <div class="px-4 py-3 bg-gray-50 border-b border-gray-200">
+    <h2 class="font-semibold text-gray-900">Other Names / DBA</h2>
+  </div>
+  <div class="divide-y divide-gray-100">
+    {% for n in nppes.other_names %}
+    <div class="px-4 py-2.5 text-sm">{{ n.other_name }} {% if n.name_type %}<span class="text-gray-400 text-xs">(type {{ n.name_type }})</span>{% endif %}</div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- HIE Endpoints -->
+{% if nppes.endpoints %}
+<div class="bg-white border border-gray-200 rounded-lg overflow-hidden mb-6">
+  <div class="px-4 py-3 bg-gray-50 border-b border-gray-200">
+    <h2 class="font-semibold text-gray-900">Health Information Exchange</h2>
+  </div>
+  <div class="divide-y divide-gray-100">
+    {% for ep in nppes.endpoints %}
+    <div class="px-4 py-3 text-sm">
+      <div class="flex items-start gap-3">
+        <span class="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded mt-0.5 shrink-0">{{ ep.endpoint_type }}</span>
+        <div>
+          <div class="font-mono text-xs text-blue-700 break-all">{{ ep.endpoint }}</div>
+          {% if ep.description %}<div class="text-gray-500 text-xs mt-0.5">{{ ep.description }}</div>{% endif %}
+          {% if ep.org_name %}<div class="text-gray-500 text-xs">{{ ep.org_name }}</div>{% endif %}
+          {% if ep.use_description %}<div class="text-gray-400 text-xs">Use: {{ ep.use_description }}</div>{% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Combined Profile Card -->
+<div class="bg-white border-2 border-blue-200 rounded-lg overflow-hidden mb-6">
+  <div class="px-4 py-3 bg-blue-600 text-white">
+    <h2 class="font-semibold">Combined Profile</h2>
+    <p class="text-blue-200 text-xs">All confirmed information in one place</p>
+  </div>
+  <div class="px-4 py-4">
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+
+      {% set name = (hhl.hhl_name if hhl and hhl.hhl_name else display_name) %}
+      {% if name %}
+      <div>
+        <span class="text-xs text-gray-400 uppercase font-medium">Name</span>
+        <div class="font-semibold mt-0.5">{{ name }}{% if nppes.credential %}, {{ nppes.credential }}{% endif %}</div>
+      </div>
+      {% endif %}
+
+      <div>
+        <span class="text-xs text-gray-400 uppercase font-medium">NPI</span>
+        <div class="font-mono mt-0.5">{{ npi }}</div>
+      </div>
+
+      {% if hhl and hhl.get('hhl_type') %}
+      <div>
+        <span class="text-xs text-gray-400 uppercase font-medium">Professional Type</span>
+        <div class="mt-0.5">{{ hhl.hhl_type }}</div>
+      </div>
+      {% endif %}
+
+      {% if nppes.entity_type %}
+      <div>
+        <span class="text-xs text-gray-400 uppercase font-medium">NPI Type</span>
+        <div class="mt-0.5">{% if nppes.entity_type == 1 %}Type 1 — Individual{% elif nppes.entity_type == 2 %}Type 2 — Organization{% endif %}</div>
+      </div>
+      {% endif %}
+
+      {% if hhl and hhl.get('hhl_email') %}
+      <div>
+        <span class="text-xs text-gray-400 uppercase font-medium">Email</span>
+        <div class="mt-0.5"><a href="mailto:{{ hhl.hhl_email }}" class="text-blue-600 hover:underline">{{ hhl.hhl_email }}</a></div>
+      </div>
+      {% endif %}
+
+      {% set phone = nppes.practice_phone or nppes.mailing_phone %}
+      {% if phone %}
+      <div>
+        <span class="text-xs text-gray-400 uppercase font-medium">Phone</span>
+        <div class="mt-0.5">{{ phone }}</div>
+      </div>
+      {% endif %}
+
+      {% if hhl and hhl.get('hhl_center_name') %}
+      <div>
+        <span class="text-xs text-gray-400 uppercase font-medium">Medical Center</span>
+        <div class="mt-0.5">{{ hhl.hhl_center_name }}</div>
+      </div>
+      {% endif %}
+
+      {% if nppes.parent_org_name %}
+      <div>
+        <span class="text-xs text-gray-400 uppercase font-medium">Parent Organization</span>
+        <div class="mt-0.5">{{ nppes.parent_org_name }}</div>
+      </div>
+      {% endif %}
+
+      {% set addr = nppes.practice_address1 or nppes.mailing_address1 %}
+      {% set city = nppes.practice_city or nppes.mailing_city %}
+      {% set state = nppes.practice_state or nppes.mailing_state %}
+      {% set zip = nppes.practice_zip or nppes.mailing_zip %}
+      {% if addr %}
+      <div class="sm:col-span-2">
+        <span class="text-xs text-gray-400 uppercase font-medium">Primary Address</span>
+        <div class="mt-0.5">{{ addr }}, {{ city }}, {{ state }} {{ zip }}</div>
+      </div>
+      {% endif %}
+
+      {% if nppes.taxonomies %}
+      <div class="sm:col-span-2">
+        <span class="text-xs text-gray-400 uppercase font-medium">Taxonomy</span>
+        <div class="mt-0.5 flex flex-wrap gap-1">
+          {% for tax in nppes.taxonomies %}
+            <span class="font-mono text-xs px-1.5 py-0.5 {% if tax.is_primary %}bg-blue-100 text-blue-800{% else %}bg-gray-100 text-gray-600{% endif %} rounded">{{ tax.taxonomy_code }}</span>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      {% if nppes.practice_locations %}
+      <div class="sm:col-span-2">
+        <span class="text-xs text-gray-400 uppercase font-medium">Additional Locations</span>
+        <div class="mt-0.5 space-y-0.5">
+          {% for loc in nppes.practice_locations %}
+            <div class="text-xs text-gray-600">{{ loc.address1 }}, {{ loc.city }}, {{ loc.state }} {{ loc.zip }}</div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      {% if nppes.endpoints %}
+      <div class="sm:col-span-2">
+        <span class="text-xs text-gray-400 uppercase font-medium">HIE Endpoints</span>
+        <div class="mt-0.5 space-y-0.5">
+          {% for ep in nppes.endpoints %}
+            <div class="text-xs font-mono text-blue-700">{{ ep.endpoint }} <span class="text-gray-400 font-sans">({{ ep.endpoint_type }})</span></div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+</div>
+
+{% endif %}
+{% endblock %}

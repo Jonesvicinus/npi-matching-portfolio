@@ -216,3 +216,13 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# NPI matching — local data (never commit)
+data/
+*.db
+*.db-shm
+*.db-wal
+*.csv
+
+# macOS
+.DS_Store

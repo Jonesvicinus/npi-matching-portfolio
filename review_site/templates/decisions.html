@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Decisions — NPI Review{% endblock %}
+{% block content %}
+
+<div class="flex items-center justify-between mb-4">
+  <h1 class="text-2xl font-bold">Decisions</h1>
+  <a href="/export" class="text-xs bg-green-600 text-white px-3 py-1.5 rounded hover:bg-green-700">Export Approved CSV</a>
+</div>
+
+<!-- Tabs + search -->
+<div class="flex items-center gap-3 mb-4 flex-wrap">
+  <div class="flex rounded-lg border border-gray-200 overflow-hidden text-sm">
+    {% set tab_defs = [
+      ("approved", "Approved",     "bg-green-600",  counts.approved),
+      ("rejected", "Rejected",     "bg-red-600",    counts.rejected),
+      ("flagged",  "Flagged",      "bg-orange-500", counts.flagged),
+      ("all",      "All",          "bg-blue-600",   counts.all),
+    ] %}
+    {% for slug, label, active_color, count in tab_defs %}
+    <a href="/decisions?tab={{ slug }}&q={{ search }}&per_page={{ per_page }}"
+       class="px-4 py-2 {% if not loop.first %}border-l border-gray-200{% endif %}
+              {% if tab == slug %}{{ active_color }} text-white{% else %}bg-white text-gray-600 hover:bg-gray-50{% endif %}">
+      {{ label }}
+      <span class="ml-1 text-xs {% if tab == slug %}opacity-75{% else %}text-gray-400{% endif %}">{{ count }}</span>
+    </a>
+    {% endfor %}
+  </div>
+
+  <form method="get" action="/decisions" class="flex gap-2 items-center">
+    <input type="hidden" name="tab" value="{{ tab }}">
+    <input type="text" name="q" value="{{ search }}" placeholder="Search by name…"
+           class="border border-gray-300 rounded px-2 py-1.5 text-sm w-56 focus:outline-none focus:border-blue-400">
+    <select name="per_page" class="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-400">
+      {% for n in [25, 50, 100, 250] %}
+        <option value="{{ n }}" {% if per_page == n %}selected{% endif %}>{{ n }} per page</option>
+      {% endfor %}
+      <option value="999999" {% if per_page == 999999 %}selected{% endif %}>Show all</option>
+    </select>
+    <button type="submit" class="px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">Apply</button>
+    {% if search %}<a href="/decisions?tab={{ tab }}&per_page={{ per_page }}" class="text-gray-400 hover:text-gray-600 text-xs">Clear</a>{% endif %}
+  </form>
+
+  <span class="ml-auto text-gray-400 text-sm">{{ total }} record{{ 's' if total != 1 }}</span>
+</div>
+
+{% if not rows %}
+  <p class="text-gray-500 py-12 text-center">No records in this category yet.</p>
+{% else %}
+<div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+  <table class="w-full text-sm">
+    <thead>
+      <tr class="border-b border-gray-200 bg-gray-50 text-xs text-gray-500 uppercase font-medium">
+        <th class="text-left px-4 py-2.5">HHL Name</th>
+        <th class="text-left px-4 py-2.5">Type</th>
+        <th class="text-left px-4 py-2.5">State</th>
+        <th class="text-left px-4 py-2.5">NPPES Match</th>
+        <th class="text-left px-4 py-2.5">NPI</th>
+        <th class="text-left px-4 py-2.5">Decision</th>
+        <th class="text-left px-4 py-2.5">Confidence</th>
+        <th class="text-left px-4 py-2.5">Date</th>
+        <th class="text-left px-4 py-2.5">Notes</th>
+        <th class="px-4 py-2.5"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors {% if loop.last %}border-b-0{% endif %}">
+        <td class="px-4 py-3 font-medium">{{ r.name }}</td>
+        <td class="px-4 py-3">
+          {% if r.hhl_type == 'center' %}
+            <span class="px-2 py-0.5 rounded text-xs bg-purple-100 text-purple-700">Center</span>
+          {% else %}
+            <span class="px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700">Professional</span>
+            {% if r.hhl_type_label %}<span class="ml-1 text-xs text-gray-400">{{ r.hhl_type_label }}</span>{% endif %}
+          {% endif %}
+        </td>
+        <td class="px-4 py-3 text-gray-500">{{ r.hhl_state }}</td>
+        <td class="px-4 py-3 text-gray-700">{{ r.nppes_name }}</td>
+        <td class="px-4 py-3 font-mono text-gray-500 text-xs">{{ r.nppes_npi }}</td>
+        <td class="px-4 py-3">
+          {% if r.decision == 'APPROVED' %}
+            <span class="px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-800">APPROVED</span>
+          {% elif r.decision == 'REJECTED' %}
+            <span class="px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-800">REJECTED</span>
+          {% elif r.decision == 'FLAGGED' %}
+            <span class="px-2 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-800">FLAGGED</span>
+          {% endif %}
+        </td>
+        <td class="px-4 py-3">
+          {% if r.confidence == 'HIGH' %}<span class="px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-800">HIGH</span>
+          {% elif r.confidence == 'MEDIUM' %}<span class="px-2 py-0.5 rounded text-xs font-semibold bg-yellow-100 text-yellow-800">MEDIUM</span>
+          {% elif r.confidence == 'LOW' %}<span class="px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-800">LOW</span>
+          {% elif r.confidence %}<span class="px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600">{{ r.confidence }}</span>
+          {% endif %}
+        </td>
+        <td class="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{{ r.decided_at }}</td>
+        <td class="px-4 py-3 text-gray-400 text-xs max-w-xs truncate">{{ r.notes }}</td>
+        <td class="px-4 py-3">
+          <div class="flex gap-1.5 justify-end items-center">
+            {% if r.nppes_npi %}
+            <a href="/provider/{{ r.nppes_npi }}"
+               class="text-xs px-2.5 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700 whitespace-nowrap">
+              Profile →
+            </a>
+            {% endif %}
+            <a href="/{{ r.hhl_type }}s?q={{ r.name }}"
+               class="text-xs px-2.5 py-1.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 whitespace-nowrap">
+              Review
+            </a>
+            <form action="/undecide/{{ r.hhl_type }}/{{ r.hhl_id }}" method="post">
+              <input type="hidden" name="back" value="/decisions?tab={{ tab }}&q={{ search }}&per_page={{ per_page }}&page={{ page }}">
+              <button type="submit"
+                      onclick="return confirm('Remove the {{ r.decision }} decision for {{ r.name }}?')"
+                      class="text-xs px-2.5 py-1.5 rounded border border-gray-300 text-gray-500 hover:border-red-300 hover:text-red-600 hover:bg-red-50">
+                Undo
+              </button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% set qs = "tab=" ~ tab ~ "&q=" ~ search ~ "&per_page=" ~ per_page %}
+{% if total > per_page %}
+<div class="flex gap-2 mt-4 justify-center text-sm items-center">
+  {% if page > 1 %}
+    <a href="/decisions?{{ qs }}&page={{ page - 1 }}" class="px-3 py-1.5 border border-gray-300 rounded hover:bg-gray-50">← Prev</a>
+  {% endif %}
+  <span class="px-3 py-1.5 text-gray-500">Page {{ page }} of {{ ((total - 1) // per_page) + 1 }} &nbsp;({{ total }} records)</span>
+  {% if page * per_page < total %}
+    <a href="/decisions?{{ qs }}&page={{ page + 1 }}" class="px-3 py-1.5 border border-gray-300 rounded hover:bg-gray-50">Next →</a>
+  {% endif %}
+</div>
+{% else %}
+<p class="text-center text-xs text-gray-400 mt-4">{{ total }} record{{ 's' if total != 1 }}</p>
+{% endif %}
+
+{% endblock %}
