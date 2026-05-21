@@ -16,6 +16,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 from flask import Flask, flash, get_flashed_messages, redirect, render_template, request, url_for, Response
+from markupsafe import Markup, escape
 
 BASE_DIR     = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR     = os.path.join(BASE_DIR, "data")
@@ -47,6 +48,52 @@ def _safe_back(url, fallback="/"):
     if url and url.startswith("/") and not url.startswith("//"):
         return url
     return fallback
+
+
+_STATE_ABBR = {
+    "Alabama": "AL", "Alaska": "AK", "Arizona": "AZ", "Arkansas": "AR",
+    "California": "CA", "Colorado": "CO", "Connecticut": "CT", "Delaware": "DE",
+    "Florida": "FL", "Georgia": "GA", "Hawaii": "HI", "Idaho": "ID",
+    "Illinois": "IL", "Indiana": "IN", "Iowa": "IA", "Kansas": "KS",
+    "Kentucky": "KY", "Louisiana": "LA", "Maine": "ME", "Maryland": "MD",
+    "Massachusetts": "MA", "Michigan": "MI", "Minnesota": "MN", "Mississippi": "MS",
+    "Missouri": "MO", "Montana": "MT", "Nebraska": "NE", "Nevada": "NV",
+    "New Hampshire": "NH", "New Jersey": "NJ", "New Mexico": "NM", "New York": "NY",
+    "North Carolina": "NC", "North Dakota": "ND", "Ohio": "OH", "Oklahoma": "OK",
+    "Oregon": "OR", "Pennsylvania": "PA", "Rhode Island": "RI", "South Carolina": "SC",
+    "South Dakota": "SD", "Tennessee": "TN", "Texas": "TX", "Utah": "UT",
+    "Vermont": "VT", "Virginia": "VA", "Washington": "WA", "West Virginia": "WV",
+    "Wisconsin": "WI", "Wyoming": "WY", "District of Columbia": "DC",
+}
+
+def abbr_state(s):
+    if not s:
+        return ""
+    s = s.strip()
+    if len(s) <= 2:
+        return s.upper()
+    return _STATE_ABBR.get(s, s[:2].upper())
+
+
+_CREDENTIAL_KEYWORDS = {
+    "Physician":                           ["MD", "DO", "MBBS", "M.D", "D.O"],
+    "Nurse":                               ["RN", "NP", "APRN", "FNP", "CNP", "CRNP", "APN"],
+    "Social Worker":                       ["LCSW", "MSW", "LISW", "LMSW", "CSW"],
+    "Rehabilitation Therapist (PT/OT/ET)": ["PT", "OT", "DPT", "MPT", "LPT"],
+    "Transplant Coordinator":              ["RN", "NP", "APRN", "BSN"],
+    "Case Manager":                        ["RN", "LCSW", "MSW"],
+}
+
+
+
+def matched_credential(hhl_type_label, nppes_credential):
+    """Return the specific keyword that fired the credential signal, not the raw string."""
+    keywords = _CREDENTIAL_KEYWORDS.get(hhl_type_label, [])
+    cred_upper = (nppes_credential or "").upper()
+    for kw in keywords:
+        if kw in cred_upper:
+            return kw
+    return nppes_credential or ""
 
 
 # ---------------------------------------------------------------------------
@@ -418,10 +465,19 @@ def decisions_page():
     all_decisions = get_all_decisions()
     centers       = get_centers()
     professionals = get_professionals()
-    tab           = request.args.get("tab", "approved")
-    search        = request.args.get("q", "").strip().lower()
 
-    # tab controls which decision type(s) to show
+    tab          = request.args.get("tab", "all")
+    search       = request.args.get("q", "").strip().lower()
+    filter_state = request.args.get("state", "all")
+    filter_type  = request.args.get("hhl_type", "all")
+
+    _sort_cols = ["name", "type", "state", "decision", "date"]
+    sorts = {}
+    for col in _sort_cols:
+        val = request.args.get(f"sort_{col}", "")
+        if val in ("asc", "desc"):
+            sorts[col] = val
+
     dec_filter = {"approved": "APPROVED", "rejected": "REJECTED", "flagged": "FLAGGED"}.get(tab)
 
     rows = []
@@ -435,49 +491,110 @@ def decisions_page():
         cands  = g.get("candidates", [])
         chosen = next((c for c in cands if c.get("nppes_npi") == d.get("nppes_npi")), cands[0] if cands else {})
 
-        name = meta.get("hhl_name", hhl_id)
+        name  = meta.get("hhl_name", hhl_id)
+        state = abbr_state(meta.get("hhl_state", ""))
+
         if search and search not in name.lower():
             continue
+        if filter_state != "all" and state != filter_state:
+            continue
+        if filter_type != "all" and hhl_type != filter_type:
+            continue
+
+        signals_raw = (chosen.get("signals_matched") or "")
+        signals = [s.strip() for s in signals_raw.split("|") if s.strip()]
 
         rows.append({
             "hhl_id":         hhl_id,
             "hhl_type":       hhl_type,
             "name":           name,
-            "hhl_state":      meta.get("hhl_state", ""),
+            "hhl_state":      state,
             "hhl_type_label": meta.get("hhl_type", ""),
             "decision":       d["decision"],
-            "nppes_npi":      d.get("nppes_npi", ""),
-            "nppes_name":     chosen.get("nppes_name") or f"{chosen.get('nppes_first_name','')} {chosen.get('nppes_last_name','')}".strip(),
-            "confidence":     chosen.get("confidence", ""),
-            "notes":          d.get("notes", ""),
-            "decided_at":     (d.get("decided_at") or "")[:10],
+            "nppes_npi":           d.get("nppes_npi", ""),
+            "nppes_candidate_npi": chosen.get("nppes_npi", ""),
+            "nppes_name":     (chosen.get("nppes_name") or
+                               f"{chosen.get('nppes_first_name','')} {chosen.get('nppes_last_name','')}".strip()),
+            "confidence":         chosen.get("confidence", ""),
+            "match_score":        chosen.get("match_score", ""),
+            "signals":            signals,
+            "nppes_credential":   chosen.get("nppes_credential", ""),
+            "nppes_taxonomy_code": chosen.get("nppes_taxonomy_code", ""),
+            "nppes_phone":         chosen.get("nppes_phone", ""),
+            "nppes_city":         chosen.get("nppes_city", ""),
+            "nppes_state":        chosen.get("nppes_state", ""),
+            "notes":              d.get("notes", ""),
+            "decided_at":       (d.get("decided_at") or "")[:10],
+            "decided_at_full":  (d.get("decided_at") or ""),
         })
 
-    rows.sort(key=lambda r: (r["hhl_type"], r["name"].lower()))
+    # Fixed priority hierarchy: type > decision > state > date > name.
+    # Apply as a stable-sort cascade in reverse priority (least important first).
+    _DECISION_ORDER = {"FLAGGED": 0, "APPROVED": 1, "REJECTED": 2}
+    _TYPE_ORDER     = {"center": 0, "professional": 1}
+    # When both name and date are active, group by calendar day (not by exact time).
+    date_key = "decided_at" if ("name" in sorts and "date" in sorts) else "decided_at_full"
+    _sort_key_map = {
+        "name":     lambda r: r["name"].lower(),
+        "type":     lambda r: _TYPE_ORDER.get(r["hhl_type"], 99),
+        "state":    lambda r: r["hhl_state"],
+        "decision": lambda r: _DECISION_ORDER.get(r["decision"], 99),
+        "date":     lambda r: r[date_key],
+    }
+    _priority = ["name", "date", "state", "decision", "type"]
+    if sorts:
+        for col in _priority:
+            if col not in sorts:
+                continue
+            # Date: ↑ (asc) = newest first, ↓ (desc) = oldest first — inverted from alphabetical convention.
+            if col == "date":
+                reverse = (sorts[col] == "asc")
+            else:
+                reverse = (sorts[col] == "desc")
+            rows.sort(key=_sort_key_map[col], reverse=reverse)
+    else:
+        rows.sort(key=lambda r: (r["hhl_type"], r["name"].lower()))
 
     counts = {}
     for label, dec in [("approved", "APPROVED"), ("rejected", "REJECTED"), ("flagged", "FLAGGED")]:
         counts[label] = sum(1 for d in all_decisions.values() if d["decision"] == dec)
     counts["all"] = sum(counts.values())
 
+    state_set = set()
+    for (hhl_id, hhl_type), _ in all_decisions.items():
+        groups = centers if hhl_type == "center" else professionals
+        s = abbr_state((groups.get(hhl_id, {}).get("meta") or {}).get("hhl_state", ""))
+        if s:
+            state_set.add(s)
+    states = sorted(state_set)
+
     per_page = _safe_int(request.args.get("per_page"), 50, {25, 50, 100, 250, 999999})
     page     = max(1, _safe_int(request.args.get("page"), 1))
-    total = len(rows)
-    start = (page - 1) * per_page
-    paged = rows[start:start + per_page]
+    total    = len(rows)
+    paged    = rows[(page - 1) * per_page : page * per_page]
 
-    return render_template("decisions.html", rows=paged, total=total, page=page, per_page=per_page,
-                           tab=tab, search=search, counts=counts)
+    return render_template("decisions.html",
+        rows=paged, total=total, page=page, per_page=per_page,
+        tab=tab, search=request.args.get("q", ""), counts=counts,
+        filter_state=filter_state, filter_type=filter_type,
+        states=states, sorts=sorts,
+    )
 
 
 @app.route("/undecide/<hhl_type>/<hhl_id>", methods=["POST"])
 def undecide(hhl_type, hhl_id):
     back = _safe_back(request.form.get("back"), "/decisions")
+    name = request.form.get("name", "").strip()
     conn = get_decisions_conn()
     conn.execute("DELETE FROM decisions WHERE hhl_id = ? AND hhl_type = ?", (hhl_id, hhl_type))
     conn.commit()
     conn.close()
-    flash("Decision removed.", "info")
+    review_url = f"/{hhl_type}s?q={escape(name)}" if name else f"/{hhl_type}s"
+    label = escape(name) if name else "Record"
+    flash(Markup(
+        f'Decision cleared for <strong>{label}</strong>. '
+        f'<a href="{review_url}" style="color:inherit;font-weight:700;text-decoration:underline;">Re-review →</a>'
+    ), "info")
     return redirect(back)
 
 
