@@ -31,14 +31,14 @@
       {% set tab_defs = [
         ("all",      "All",      "var(--bw-brand-600)", counts.all),
         ("approved", "Approved", "var(--bw-success)",   counts.approved),
-        ("rejected", "Rejected", "var(--bw-error)",     counts.rejected),
+        ("rejected", "No Match", "var(--bw-error)",     counts.rejected),
         ("flagged",  "Flagged",  "var(--bw-warn)",      counts.flagged),
       ] %}
       {% for slug, label, active_color, count in tab_defs %}
       <a href="/decisions?tab={{ slug }}&q={{ search }}&per_page={{ per_page }}&state={{ filter_state }}&hhl_type={{ filter_type }}{% for col, dir in sorts.items() %}&sort_{{ col }}={{ dir }}{% endfor %}"
          class="bw-decision-tab{% if tab == slug %} bw-decision-tab--active{% endif %}"
-         style="display:inline-flex;align-items:center;padding:9px 16px;font-family:var(--bw-font-body);font-weight:600;font-size:13px;text-decoration:none;{% if not loop.first %}border-left:1.5px solid var(--bw-rule);{% endif %}{% if tab == slug %}background:{{ active_color }};color:#fff;{% else %}background:#fff;color:var(--bw-ink-2);{% endif %}transition:background .12s,color .12s;">
-        {{ label }}&nbsp;<span style="font-size:11px;{% if tab == slug %}opacity:0.8;{% else %}color:var(--bw-muted);{% endif %}">{{ count }}</span>
+         {% if tab == slug %}style="--tab-color:{{ active_color }};"{% endif %}>
+        {{ label }}&nbsp;<span class="bw-decision-tab__count">{{ count }}</span>
       </a>
       {% endfor %}
     </div>
@@ -51,24 +51,30 @@
     {% for col, dir in sorts.items() %}
     <input type="hidden" name="sort_{{ col }}" value="{{ dir }}">
     {% endfor %}
-    <input type="text" name="q" value="{{ search }}" placeholder="Search by name…"
+    <label class="sr-only" for="filter-q">Search by name</label>
+    <input type="text" name="q" id="filter-q" value="{{ search }}" placeholder="Search by name…"
            class="bw-input" style="width:200px;" maxlength="200">
-    <select name="state" class="bw-select" style="width:145px;">
+    <label class="sr-only" for="filter-state">Filter by state</label>
+    <select name="state" id="filter-state" class="bw-select" style="width:145px;">
       <option value="all" {% if filter_state == 'all' %}selected{% endif %}>All States</option>
       {% for s in states %}
       <option value="{{ s }}" {% if filter_state == s %}selected{% endif %}>{{ s }}</option>
       {% endfor %}
     </select>
-    <select name="hhl_type" class="bw-select" style="width:145px;">
+    <label class="sr-only" for="filter-type">Filter by type</label>
+    <select name="hhl_type" id="filter-type" class="bw-select" style="width:145px;">
       <option value="all"          {% if filter_type == 'all'          %}selected{% endif %}>All Types</option>
       <option value="center"       {% if filter_type == 'center'       %}selected{% endif %}>Centers</option>
       <option value="professional" {% if filter_type == 'professional' %}selected{% endif %}>Professionals</option>
     </select>
-    <select name="per_page" class="bw-select" style="width:145px;">
+    <label class="sr-only" for="filter-per-page">Records per page</label>
+    <select name="per_page" id="filter-per-page" class="bw-select" style="width:145px;">
       {% for n in [25, 50, 100, 250] %}
         <option value="{{ n }}" {% if per_page == n %}selected{% endif %}>{{ n }} per page</option>
       {% endfor %}
+      {% if total <= 500 or per_page == 999999 %}
       <option value="999999" {% if per_page == 999999 %}selected{% endif %}>Show all</option>
+      {% endif %}
     </select>
     <button type="submit" class="bw-btn bw-btn--primary bw-btn--sm" style="padding:10px 18px;">Apply</button>
     {% if search %}<a href="/decisions?tab={{ tab }}&per_page={{ per_page }}&state={{ filter_state }}&hhl_type={{ filter_type }}{% for col, dir in sorts.items() %}&sort_{{ col }}={{ dir }}{% endfor %}" class="text-muted" style="font-size:12px;">Clear search</a>{% endif %}
@@ -101,22 +107,27 @@
 
 {% if not rows %}
   <div class="bw-card" style="padding:48px;text-align:center;">
-    <p class="text-muted">No records in this category yet.</p>
+    {% if search or filter_state != 'all' or filter_type != 'all' %}
+      <p class="text-muted">No records match the current filters.</p>
+    {% else %}
+      <p class="text-muted">No records in this category yet.</p>
+    {% endif %}
   </div>
 {% else %}
-<div class="bw-card" style="overflow:visible;">
+<div class="bw-card">
+  <div style="overflow-x:auto;">
   <table class="bw-table" id="decisions-table" style="table-layout:fixed;">
     <thead>
       <tr>
         <th scope="col" style="width:32px;padding:0;"></th>
         {{ sort_th("name",     "HHL Name") }}
-        {{ sort_th("type",     "Type",     "width:110px;") }}
-        {{ sort_th("state",    "State",    "width:100px;") }}
+        {{ sort_th("type",     "Type",     "width:100px;") }}
+        {{ sort_th("state",    "State",    "width:68px;") }}
         <th scope="col" style="width:120px;">NPI</th>
         {{ sort_th("decision", "Decision", "width:120px;") }}
-        {{ sort_th("date",     "Date",     "width:80px;") }}
-        <th scope="col" style="width:56px;text-align:center;font-family:var(--bw-font-body);font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--bw-muted);">Note</th>
-        <th scope="col" style="width:270px;"><span class="sr-only">Actions</span></th>
+        {{ sort_th("date",     "Date",     "width:96px;") }}
+        <th scope="col" style="width:56px;text-align:center;">Note</th>
+        <th scope="col" style="width:308px;"><span class="sr-only">Actions</span></th>
       </tr>
     </thead>
     <tbody>
@@ -134,14 +145,16 @@
         "signals":             r.signals,
         "decision":            r.decision,
         "notes":               r.notes,
+        "decided_at":          r.decided_at,
       } %}
       <tr data-expand="{{ expand_data | tojson | forceescape }}">
-        <td style="padding:0;width:32px;">
+        <td style="padding:0 0 0 6px;width:32px;">
           <button type="button" class="bw-expand-btn" onclick="toggleExpand(this)"
                   aria-label="Expand details for {{ r.name }}"
-                  style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--bw-muted);width:32px;height:100%;padding:13px 0;display:flex;align-items:center;justify-content:center;">▶</button>
+                  aria-expanded="false"
+                  style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--bw-muted);width:100%;height:100%;padding:13px 0;display:flex;align-items:center;justify-content:center;">▶</button>
         </td>
-        <td style="font-weight:600;min-width:180px;">{{ r.name }}</td>
+        <td style="font-weight:600;overflow-wrap:break-word;">{{ r.name }}</td>
         <td style="white-space:nowrap;">
           {% if r.hhl_type == 'center' %}
             <span class="bw-badge bw-badge--navy">Center</span>
@@ -153,19 +166,19 @@
         <td class="mono text-muted" style="font-size:12px;white-space:nowrap;">{{ r.nppes_npi }}</td>
         <td style="white-space:nowrap;">
           {% if r.decision == 'APPROVED' %}<span class="bw-badge bw-badge--approved">APPROVED</span>
-          {% elif r.decision == 'REJECTED' %}<span class="bw-badge bw-badge--rejected">REJECTED</span>
+          {% elif r.decision == 'REJECTED' %}<span class="bw-badge bw-badge--rejected">NO MATCH</span>
           {% elif r.decision == 'FLAGGED' %}<span class="bw-badge bw-badge--flagged">FLAGGED</span>
           {% endif %}
         </td>
         <td class="text-muted" style="font-size:12px;white-space:nowrap;">
-          {% if r.decided_at %}{{ r.decided_at[5:7] }}/{{ r.decided_at[8:10] }}{% endif %}
+          {% if r.decided_at %}{{ r.decided_at[5:7] }}/{{ r.decided_at[8:10] }}/{{ r.decided_at[2:4] }}{% endif %}
         </td>
-        <td style="text-align:center;width:28px;">
+        <td style="text-align:center;padding:8px 0;">
           {% if r.notes %}
           <span class="note-peek" tabindex="0"
                 data-note="{{ r.notes | e }}"
-                aria-label="Has notes"
-                style="color:var(--bw-brand);font-size:18px;font-weight:bold;cursor:pointer;">✎</span>
+                aria-label="Note: {{ r.notes | e }}"
+                style="display:inline-flex;align-items:center;justify-content:center;min-width:40px;min-height:40px;color:var(--bw-brand);font-size:18px;font-weight:bold;cursor:pointer;">✎</span>
           {% endif %}
         </td>
         <td style="white-space:nowrap;">
@@ -173,7 +186,7 @@
             {% if r.nppes_npi %}
             <a href="/provider/{{ r.nppes_npi }}" class="bw-btn bw-btn--outline bw-btn--sm">Profile →</a>
             {% endif %}
-            <a href="/{{ r.hhl_type }}s?q={{ r.name }}" class="bw-btn bw-btn--ghost bw-btn--sm">Review</a>
+            <a href="/{{ r.hhl_type }}s?q={{ r.name }}" class="bw-btn bw-btn--ghost bw-btn--sm" data-review-link>Review</a>
             <form action="/undecide/{{ r.hhl_type }}/{{ r.hhl_id }}" method="post" style="display:inline;border-left:1px solid var(--bw-rule);padding-left:8px;margin-left:2px;">
               <input type="hidden" name="back" value="/decisions?tab={{ tab }}&q={{ search }}&per_page={{ per_page }}&state={{ filter_state }}&hhl_type={{ filter_type }}{% for col, dir in sorts.items() %}&sort_{{ col }}={{ dir }}{% endfor %}&page={{ page }}">
               <input type="hidden" name="name" value="{{ r.name | e }}">
@@ -187,6 +200,7 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
 </div>
 {% endif %}
 
@@ -218,14 +232,22 @@
     white-space: nowrap;
     transition: color .12s;
   }
-  .bw-sort-btn:hover { color: var(--bw-brand); }
-  .bw-sort-btn--active { color: var(--bw-brand); }
+  .bw-sort-btn:hover { color: var(--bw-brand-600); }
+  .bw-sort-btn--active { color: var(--bw-brand-600); }
   .bw-sort-btn:focus-visible,
-  .bw-sort-chip:focus-visible,
-  .bw-expand-btn:focus-visible,
-  .bw-decision-tab:focus-visible {
+  .bw-sort-chip:focus-visible {
     outline: 2px solid var(--bw-brand);
     outline-offset: 2px;
+    border-radius: var(--bw-r-sm);
+  }
+  .bw-expand-btn:focus-visible {
+    outline: 2px solid var(--bw-brand);
+    outline-offset: -2px;
+    border-radius: var(--bw-r-sm);
+  }
+  .bw-decision-tab:focus-visible {
+    outline: 2px solid var(--bw-brand);
+    outline-offset: -3px;
     border-radius: var(--bw-r-sm);
   }
   .note-peek:focus-visible {
@@ -233,9 +255,28 @@
     outline-offset: 3px;
     border-radius: 2px;
   }
+  .bw-decision-tab--active:focus-visible { outline-color: #fff; }
+  .bw-decision-tab:first-child:focus-visible { border-radius: var(--bw-r-md) 0 0 var(--bw-r-md); }
+  .bw-decision-tab:last-child:focus-visible  { border-radius: 0 var(--bw-r-md) var(--bw-r-md) 0; }
+  .bw-decision-tab {
+    display: inline-flex;
+    align-items: center;
+    padding: 12px 16px;
+    font-family: var(--bw-font-body);
+    font-weight: 600;
+    font-size: 13px;
+    text-decoration: none;
+    background: #fff;
+    color: var(--bw-ink-2);
+    transition: background .12s, color .12s;
+  }
+  .bw-decision-tab + .bw-decision-tab { border-left: 1.5px solid var(--bw-rule); }
+  .bw-decision-tab--active { background: var(--tab-color, var(--bw-brand-600)); color: #fff; }
+  .bw-decision-tab__count { font-size: 11px; color: var(--bw-muted); }
+  .bw-decision-tab--active .bw-decision-tab__count { color: rgba(255,255,255,0.8); }
   .bw-decision-tab:not(.bw-decision-tab--active):hover {
-    background: var(--bw-brand-tint-10) !important;
-    color: var(--bw-brand-600) !important;
+    background: var(--bw-brand-tint-10);
+    color: var(--bw-brand-600);
   }
   .note-popover {
     position: fixed;
@@ -297,6 +338,8 @@
 </style>
 
 <script>
+  let _tipCounter = 0;
+
   function confirmUndo(btn, e) {
     e.preventDefault();
     if (btn.dataset.confirming) {
@@ -389,10 +432,13 @@
     const cardTitle = data.decision === 'REJECTED' ? 'Rejected NPPES Candidate'
                     : data.decision === 'FLAGGED'  ? 'Flagged NPPES Candidate'
                     : 'Approved NPPES Candidate';
+    const titleColor = data.decision === 'REJECTED' ? 'var(--bw-error)'
+                     : data.decision === 'FLAGGED'  ? 'var(--bw-warn)'
+                     : 'var(--bw-success)';
     const matchSection = `
       <div class="bw-expand-grid__section">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-          <p class="bw-eyebrow" style="margin:0;">${escHtml(cardTitle)}</p>
+          <p class="bw-eyebrow" style="margin:0;color:${titleColor};">${escHtml(cardTitle)}</p>
           ${data.nppes_npi ? `<a href="https://npiregistry.cms.hhs.gov/provider-view/${escHtml(data.nppes_npi)}" target="_blank" rel="noopener noreferrer" class="bw-btn bw-btn--outline bw-btn--sm" style="font-size:11px;padding:3px 7px;">↗</a>` : ''}
         </div>
         <p style="font-weight:600;font-size:13px;color:var(--bw-secondary);margin-bottom:8px;">${escHtml(data.nppes_name || '—')}</p>
@@ -442,10 +488,10 @@
         ${data.confidence ? `
           <span class="bw-badge ${confBadgeClass}" style="margin-bottom:8px;">${escHtml(data.confidence)}</span>
           ${score !== null ? `<p class="text-muted" style="font-size:12px;margin:4px 0 8px;">Score: ${score.toFixed(3)} / 1.000</p>` : ''}
-          <div class="bw-tip" tabindex="0" style="display:inline-flex;align-items:center;">
+          <div class="bw-tip" tabindex="0" aria-describedby="bw-tip-${++_tipCounter}" style="display:inline-flex;align-items:center;">
             <span style="font-size:11px;font-weight:600;color:var(--bw-muted);">How this was scored</span>
             <span class="bw-tip__icon" aria-hidden="true">?</span>
-            <span role="tooltip" class="bw-tip__body" style="width:300px;">${tooltipBody}</span>
+            <span role="tooltip" id="bw-tip-${_tipCounter}" class="bw-tip__body" style="width:300px;">${tooltipBody}</span>
           </div>
         ` : '<p class="text-muted" style="font-size:13px;">—</p>'}
       </div>`;
@@ -454,12 +500,13 @@
     const notesSection = `
       <div class="bw-expand-grid__section">
         <p class="bw-eyebrow" style="margin-bottom:8px;">Notes</p>
+        ${data.decided_at ? `<p class="text-muted" style="font-size:11px;font-weight:600;margin-bottom:8px;">${escHtml(data.decided_at.replace('T', ' ').slice(0, 16))}</p>` : ''}
         ${data.notes
           ? `<p style="font-size:13px;color:var(--bw-ink);line-height:1.5;white-space:pre-wrap;overflow-wrap:break-word;">${escHtml(data.notes)}</p>`
           : `<p class="text-muted" style="font-size:13px;">No notes recorded.</p>`}
       </div>`;
 
-    return `<td colspan="${colCount}" style="padding:0;">
+    return `<td colspan="${colCount}">
       <div class="bw-expand-grid">${matchSection}${confSection}${notesSection}</div>
     </td>`;
   }
@@ -471,7 +518,10 @@
 
     // Collapse all open panels and reset arrows
     document.querySelectorAll('tr.bw-expand-panel').forEach(p => p.remove());
-    document.querySelectorAll('.bw-expand-btn').forEach(b => b.textContent = '▶');
+    document.querySelectorAll('.bw-expand-btn').forEach(b => {
+      b.textContent = '▶';
+      b.setAttribute('aria-expanded', 'false');
+    });
 
     if (isOpen) return; // was open — just close it
 
@@ -483,6 +533,7 @@
     panel.innerHTML = buildExpandPanel(data, colCount);
 
     btn.textContent = '▼';
+    btn.setAttribute('aria-expanded', 'true');
     tr.insertAdjacentElement('afterend', panel);
   }
   // Note peek popover
@@ -492,21 +543,22 @@
     popover.className = 'note-popover';
     document.body.appendChild(popover);
 
-    let hideTimer, pinned = false;
+    let hideTimer, pinned = false, _pw = 0, _ph = 0;
 
     function show(el, e) {
       clearTimeout(hideTimer);
       popover.textContent = el.dataset.note;
       popover.style.display = 'block';
+      _pw = popover.offsetWidth;  // read once per content change, not per mousemove
+      _ph = popover.offsetHeight;
       position(e);
     }
 
     function position(e) {
       const pad = 12;
-      const pw = popover.offsetWidth, ph = popover.offsetHeight;
       let x = e.clientX + pad, y = e.clientY + pad;
-      if (x + pw > window.innerWidth  - pad) x = e.clientX - pw - pad;
-      if (y + ph > window.innerHeight - pad) y = e.clientY - ph - pad;
+      if (x + _pw > window.innerWidth  - pad) x = e.clientX - _pw - pad;
+      if (y + _ph > window.innerHeight - pad) y = e.clientY - _ph - pad;
       popover.style.left = x + 'px';
       popover.style.top  = y + 'px';
     }
@@ -558,10 +610,10 @@
       if (el) {
         popover.textContent = el.dataset.note;
         popover.style.display = 'block';
+        _pw = popover.offsetWidth;
         const r = el.getBoundingClientRect();
-        const pw = popover.offsetWidth;
         let x = r.right + 8;
-        if (x + pw > window.innerWidth - 12) x = r.left - pw - 8;
+        if (x + _pw > window.innerWidth - 12) x = r.left - _pw - 8;
         popover.style.left = x + 'px';
         popover.style.top  = r.top + 'px';
       }
@@ -571,6 +623,14 @@
     }, true);
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape' && pinned) unpin();
+    });
+  })();
+
+  // Stamp return_to on all Review links so the review page can navigate back
+  (function () {
+    const rt = encodeURIComponent(window.location.pathname + window.location.search);
+    document.querySelectorAll('a[data-review-link]').forEach(function (a) {
+      a.href += '&return_to=' + rt;
     });
   })();
 </script>

@@ -9,6 +9,11 @@
   {% else %}<span class="bw-badge bw-badge--gray">{{ conf }}</span>{% endif %}
 {% endmacro %}
 
+{% set _return_to = request.args.get('return_to', '') %}
+{% if _return_to and _return_to.startswith('/decisions') %}
+<a href="{{ _return_to | e }}" class="bw-back-banner">← Back to Decisions</a>
+{% endif %}
+
 <!-- Page header -->
 <div class="bw-page-header">
   <div>
@@ -69,9 +74,10 @@
     </div>
     <div style="display:flex;align-items:center;gap:6px;">
       <span class="eyebrow">Decision</span>
+      {% set dec_labels = {"all": "All", "PENDING": "Pending", "APPROVED": "Approved", "REJECTED": "No Match", "FLAGGED": "Flagged"} %}
       {% for d in ["all","PENDING","APPROVED","REJECTED","FLAGGED"] %}
         <a href="/professionals?conf={{ filter_conf }}&dec={{ d }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}"
-           class="bw-chip {% if filter_dec == d %}bw-chip--active{% endif %}">{{ d }}</a>
+           class="bw-chip {% if filter_dec == d %}bw-chip--active{% endif %}">{{ dec_labels[d] }}</a>
       {% endfor %}
     </div>
   </div>
@@ -101,7 +107,7 @@
           <span class="text-muted mono" style="font-size:12px;">{{ top.nppes_first_name }} {{ top.nppes_last_name }}{% if top.nppes_npi %} · {{ top.nppes_npi }}{% endif %}</span>
           <span class="bw-badge bw-badge--approved">APPROVED</span>
         {% elif decided.decision == "REJECTED" %}
-          <span class="bw-badge bw-badge--rejected">REJECTED</span>
+          <span class="bw-badge bw-badge--rejected">NO MATCH</span>
         {% elif decided.decision == "FLAGGED" %}
           <span class="bw-badge bw-badge--flagged">FLAGGED</span>
         {% endif %}

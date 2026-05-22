@@ -6,6 +6,8 @@
   <title>{% block title %}NPI Review{% endblock %}</title>
   <link rel="preload" href="/static/fonts/RobotoSlab-Latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/static/fonts/Montserrat-Latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/static/fonts/IBMPlexMono-Light.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/static/fonts/IBMPlexMono-Regular.woff2" as="font" type="font/woff2" crossorigin>
   <style>
     /* ── Local fonts (WOFF2 Latin subsets — 94% smaller than original TTFs) ── */
     @font-face {
@@ -127,8 +129,8 @@
       display: flex;
       align-items: center;
       gap: 12px;
-      padding-right: 20px;
-      margin-right: 4px;
+      padding: 0 16px 0 8px;
+      margin-right: 8px;
       border-right: 1px solid rgba(255,255,255,0.12);
       text-decoration: none;
     }
@@ -158,11 +160,14 @@
       color: rgba(255,255,255,0.65);
       text-decoration: none;
       border-bottom: 3px solid transparent;
-      transition: color 0.15s, border-color 0.15s;
+      border-radius: var(--bw-r-sm);
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
       min-height: 52px;
     }
-    .bw-nav__link:hover { color: #fff; }
+    .bw-nav__link:hover { color: #fff; background: rgba(255,255,255,0.08); }
     .bw-nav__link--active { color: #fff; border-bottom-color: var(--bw-brand); }
+    .bw-nav__link:focus-visible { outline: 2px solid var(--bw-brand); outline-offset: -3px; border-radius: var(--bw-r-sm); }
+    .bw-nav__brand:focus-visible { outline: 2px solid var(--bw-brand); outline-offset: -3px; border-radius: var(--bw-r-sm); }
     .bw-nav__actions {
       margin-left: auto;
       display: flex;
@@ -187,15 +192,15 @@
       text-decoration: none;
       white-space: nowrap;
     }
-    .bw-btn--primary  { background: var(--bw-brand); color: #fff; }
-    .bw-btn--primary:hover  { background: var(--bw-brand-600); }
+    .bw-btn--primary  { background: var(--bw-brand-600); color: #fff; }
+    .bw-btn--primary:hover  { background: var(--bw-brand-700); }
     .bw-btn--primary:active { background: var(--bw-brand-700); transform: translateY(1px); }
     .bw-btn--secondary { background: var(--bw-secondary); color: #fff; }
     .bw-btn--secondary:hover { background: var(--bw-secondary-80); }
     .bw-btn--outline  { background: transparent; color: var(--bw-brand); border-color: var(--bw-brand); }
-    .bw-btn--outline:hover  { background: var(--bw-brand); color: #fff; }
+    .bw-btn--outline:hover  { background: var(--bw-brand-600); color: #fff; border-color: var(--bw-brand-600); }
     .bw-btn--ghost    { background: transparent; color: var(--bw-secondary); border: 1.5px solid var(--bw-rule); }
-    .bw-btn--ghost:hover    { background: var(--bw-brand-tint-10); color: var(--bw-brand); border-color: var(--bw-brand); }
+    .bw-btn--ghost:hover    { background: var(--bw-brand-tint-10); color: var(--bw-brand-600); border-color: var(--bw-brand-600); }
     .bw-btn--danger   { background: transparent; color: var(--bw-error); border: 1.5px solid var(--bw-rule); }
     .bw-btn--danger:hover   { background: var(--bw-error-bg); border-color: var(--bw-error); }
     .bw-btn--warn     { background: transparent; color: var(--bw-warn); border: 1.5px solid var(--bw-warn-border); }
@@ -293,9 +298,9 @@
       transition: border-color .12s, color .12s, background .12s;
       white-space: nowrap;
     }
-    .bw-chip:hover { border-color: var(--bw-brand); color: var(--bw-brand); background: var(--bw-brand-tint-10); }
-    .bw-chip--active { background: var(--bw-brand); border-color: var(--bw-brand); color: #fff; }
-    .bw-chip--active:hover { background: var(--bw-brand-600); border-color: var(--bw-brand-600); color: #fff; }
+    .bw-chip:hover { border-color: var(--bw-brand-600); color: var(--bw-brand-600); background: var(--bw-brand-tint-10); }
+    .bw-chip--active { background: var(--bw-brand-600); border-color: var(--bw-brand-600); color: #fff; }
+    .bw-chip--active:hover { background: var(--bw-brand-700); border-color: var(--bw-brand-700); color: #fff; }
 
     /* ── Eyebrow label ───────────────────────────────────── */
     .bw-eyebrow, .eyebrow {
@@ -395,7 +400,7 @@
       font-size: 13px;
     }
     .bw-pagination a {
-      padding: 8px 16px;
+      padding: 10px 16px;
       border: 1.5px solid var(--bw-rule);
       border-radius: var(--bw-r-md);
       color: var(--bw-ink-2);
@@ -430,7 +435,6 @@
     .bw-progress__seg {
       height: 100%;
       min-width: 0;
-      transition: width .25s cubic-bezier(0,0,.2,1);
     }
     .bw-progress__seg--approved { background: var(--bw-success); }
     .bw-progress__seg--rejected { background: var(--bw-error); }
@@ -461,7 +465,7 @@
       font-size: 13px;
       font-weight: 600;
       border-radius: var(--bw-r-md);
-      animation: flashFade 3s ease forwards;
+      animation: flashFade 6s ease forwards;
       margin-bottom: 20px;
     }
     .bw-flash--approved { background: var(--bw-success-bg); color: var(--bw-success); }
@@ -471,8 +475,23 @@
 
     @media (prefers-reduced-motion: reduce) {
       .bw-flash         { animation: none; }
-      .bw-progress__seg { transition: none; }
     }
+
+    /* ── Back banner ─────────────────────────────────── */
+    .bw-back-banner {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 16px;
+      font-family: var(--bw-font-body);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--bw-secondary);
+      text-decoration: none;
+      transition: color .12s;
+    }
+    .bw-back-banner:hover { color: var(--bw-brand); }
+    .bw-back-banner:focus-visible { outline: 2px solid var(--bw-brand); outline-offset: 2px; border-radius: var(--bw-r-sm); }
 
     /* ── Inline tooltips ─────────────────────────────── */
     .bw-tip {
