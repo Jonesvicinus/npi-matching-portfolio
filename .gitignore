@@ -218,6 +218,7 @@ __marimo__/
 .streamlit/secrets.toml
 
 # NPI matching — local data (never commit)
+CLAUDE.md
 data/
 *.db
 *.db-shm
