@@ -40,8 +40,9 @@ class TestProfessionalComposite:
         assert "city_missing" in signals
 
     def test_city_missing_unique_with_other_signals(self):
+        # ceiling applied first: min(1.0, 0.75) = 0.75, then +0.10 unique bonus = 0.85
         score, signals = professional_composite(1.0, 0.0, True, True, city_missing=True, is_unique=True)
-        assert score == pytest.approx(1.0)
+        assert score == pytest.approx(0.85)
 
     def test_unique_normal_bonus_no_city_missing(self):
         score, signals = professional_composite(0.90, 1.0, True, True, city_missing=False, is_unique=True)
@@ -104,6 +105,13 @@ class TestCenterComposite:
         score, signals = center_composite(0.85, False, False, zip_missing=True)
         assert "name" in signals
 
+    def test_name_only_zip_present_no_matches(self):
+        # name only, both city and zip present but neither matched
+        score, signals = center_composite(0.70, False, False, zip_missing=False)
+        assert score == pytest.approx(0.42)   # 0.70×0.60
+        assert "city" not in signals
+        assert "zip" not in signals
+
 
 class TestConfidenceFromScore:
     def test_high_at_boundary(self):
@@ -124,3 +132,64 @@ class TestConfidenceFromScore:
 
     def test_low_at_zero(self):
         assert confidence_from_score(0.0) == "LOW"
+
+
+class TestCenterScoringIntegration:
+    def test_high_name_city_zip(self):
+        score, signals = center_composite(0.92, True, True, zip_missing=False)
+        assert confidence_from_score(score) == "HIGH"
+
+    def test_high_decent_name_city_zip_missing(self):
+        score, signals = center_composite(0.75, True, False, zip_missing=True)
+        assert score == pytest.approx(0.80)   # 0.75×0.80+0.20
+        assert confidence_from_score(score) == "HIGH"
+
+    def test_low_weak_name_no_location(self):
+        score, signals = center_composite(0.55, False, False, zip_missing=True)
+        assert score == pytest.approx(0.44)   # 0.55×0.80
+        assert confidence_from_score(score) == "LOW"
+
+
+class TestProfessionalPhase1Integration:
+    def test_high_all_signals(self):
+        score, signals = professional_composite(0.90, 1.0, True, True, city_missing=False)
+        assert score == pytest.approx(0.95)
+        assert confidence_from_score(score) == "HIGH"
+
+    def test_medium_name_city_credential(self):
+        score, signals = professional_composite(0.82, 1.0, True, False, city_missing=False)
+        assert score == pytest.approx(0.76)
+        assert confidence_from_score(score) == "MEDIUM"
+
+    def test_low_name_only_no_city(self):
+        score, signals = professional_composite(0.70, 0.0, False, False, city_missing=False)
+        assert score == pytest.approx(0.35)
+        assert confidence_from_score(score) == "LOW"
+
+    def test_city_missing_name_only_capped(self):
+        score, signals = professional_composite(1.0, 0.0, False, False, city_missing=True)
+        assert score == pytest.approx(0.70)
+        assert confidence_from_score(score) == "MEDIUM"
+
+    def test_city_missing_unique_reaches_high(self):
+        score, signals = professional_composite(1.0, 0.0, False, False, city_missing=True, is_unique=True)
+        assert score == pytest.approx(0.80)
+        assert confidence_from_score(score) == "HIGH"
+
+
+class TestProfessionalPhase2AnchorLogic:
+    def test_anchor_approved_city_always_1(self):
+        # anchor_approved → city_val=1.0 regardless of actual city match
+        score, signals = professional_composite(0.90, 1.0, True, True, city_missing=False)
+        assert confidence_from_score(score) == "HIGH"
+
+    def test_anchor_inferred_city_must_match(self):
+        # anchor_inferred → city_val=0.0 if cities don't match
+        score_no_city, _ = professional_composite(0.90, 0.0, True, True, city_missing=False)
+        score_city, _    = professional_composite(0.90, 1.0, True, True, city_missing=False)
+        assert score_city > score_no_city
+
+    def test_anchor_inferred_city_mismatch_lower_confidence(self):
+        # Strong name but inferred anchor and city mismatch → LOW
+        score, signals = professional_composite(0.90, 0.0, False, False, city_missing=False)
+        assert confidence_from_score(score) == "LOW"

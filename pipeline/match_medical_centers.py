@@ -24,6 +24,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 
 from rapidfuzz import fuzz, process as fuzz_process
+from scoring import center_composite, confidence_from_score
 
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR   = os.path.join(BASE_DIR, "data")
@@ -221,63 +222,6 @@ def score_against_entries(norm_query, entry_indices, all_entries, all_norm_names
     return sorted(seen.values(), key=lambda x: x[0], reverse=True)[:TOP_N]
 
 
-def confidence_and_signals(name_score, hhl_city, hhl_zip, nppes_city, nppes_zip,
-                           is_unique=False):
-    """
-    HIGH   = name >= 0.85 AND all available location signals confirmed.
-             If HHL has both city and ZIP, both must match.
-             If HHL has only one, that one must match.
-             If HHL has neither AND is_unique: name >= 0.85 + no close competitor
-             in the state (score gap >= 0.15 from second-best candidate).
-    MEDIUM = name >= 0.70 AND at least one location signal matches,
-             OR name >= 0.85 with no HHL location data and not unique.
-    LOW    = name >= 0.50.
-    """
-    signals = []
-    if name_score >= 0.85:
-        signals.append("name")
-
-    zip5_hhl   = hhl_zip.strip()[:5]  if hhl_zip   else ""
-    zip5_nppes = nppes_zip.strip()[:5] if nppes_zip else ""
-    city_match = bool(
-        hhl_city and nppes_city and
-        hhl_city.strip().upper() == nppes_city.strip().upper()
-    )
-    zip_match = bool(zip5_hhl and zip5_nppes and zip5_hhl == zip5_nppes)
-
-    if city_match: signals.append("city")
-    if zip_match:  signals.append("zip")
-
-    has_city = bool(hhl_city)
-    has_zip  = bool(zip5_hhl)
-    loc_confirmed = city_match or zip_match
-
-    # Location-confirmed HIGH
-    if has_city and has_zip:
-        if name_score >= 0.85 and city_match and zip_match:
-            return "HIGH", "|".join(signals)
-    elif has_city:
-        if name_score >= 0.85 and city_match:
-            return "HIGH", "|".join(signals)
-    elif has_zip:
-        if name_score >= 0.85 and zip_match:
-            return "HIGH", "|".join(signals)
-
-    # Uniqueness HIGH: no location data, but no close competitor exists in state
-    if name_score >= 0.85 and not has_city and not has_zip and is_unique:
-        signals.append("unique")
-        return "HIGH", "|".join(signals)
-
-    if name_score >= 0.70 and loc_confirmed:
-        return "MEDIUM", "|".join(signals)
-    if name_score >= 0.85:
-        return "MEDIUM", "|".join(signals)  # strong name but no location to verify
-    if name_score >= 0.50:
-        return "LOW", "|".join(signals) or "name_weak"
-
-    return "LOW", "|".join(signals)
-
-
 # ---------------------------------------------------------------------------
 # Per-center matching
 # ---------------------------------------------------------------------------
@@ -334,26 +278,29 @@ def process_center(center):
         return [{**base, "rank": "", "confidence": "NO_MATCH", "match_score": "",
                  "match_source": "", "signals_matched": "", **empty, "action": "NEEDS_REVIEW"}]
 
-    # Uniqueness: only when HHL has no location data at all.
-    # True when the top match has a score gap >= 0.15 over the second-best,
-    # meaning no other provider in the state is a plausible match.
-    no_loc    = not hhl_city and not zip5
-    is_unique = no_loc and (len(top) < 2 or (top[0][0] - top[1][0] >= 0.15))
+    is_unique = len(top) < 2 or (top[0][0] - top[1][0] >= 0.15)
+    zip_missing = not bool(zip5)
 
     out_rows = []
     for rank, (score, source, row) in enumerate(top, 1):
-        confidence, signals = confidence_and_signals(
-            score, hhl_city, hhl_zip,
-            row.get("practice_city", "") or "", row.get("practice_zip", "") or "",
-            is_unique=(is_unique and rank == 1),
+        zip5_nppes = (row.get("practice_zip") or "").strip()[:5]
+        city_match = bool(
+            hhl_city and row.get("practice_city") and
+            hhl_city.strip().upper() == row["practice_city"].strip().upper()
         )
+        zip_match = bool(zip5 and zip5_nppes and zip5 == zip5_nppes)
+        composite, signals = center_composite(
+            score, city_match, zip_match, zip_missing,
+            is_unique=(rank == 1 and is_unique),
+        )
+        confidence = confidence_from_score(composite)
         out_rows.append({
             **base,
             "rank":             rank,
             "confidence":       confidence,
-            "match_score":      f"{score:.3f}",
+            "match_score":      f"{composite:.3f}",
             "match_source":     source,
-            "signals_matched":  signals,
+            "signals_matched":  "|".join(signals),
             "nppes_npi":        row["npi"],
             "nppes_name":       row["org_name"]          or "",
             "nppes_address":    row["practice_address1"] or "",

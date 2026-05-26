@@ -44,12 +44,13 @@ def professional_composite(
     if tax_match:
         signals.append("taxonomy")
 
+    if city_missing:
+        composite = min(composite, CITY_MISSING_CEILING)
+
     if is_unique:
         bonus = UNIQUE_BONUS_NO_CITY if city_missing else UNIQUE_BONUS
         composite = min(1.0, composite + bonus)
         signals.append("unique")
-    elif city_missing:
-        composite = min(composite, CITY_MISSING_CEILING)
 
     return round(composite, 3), signals
 
