@@ -32,6 +32,7 @@ from concurrent.futures import ThreadPoolExecutor
 from rapidfuzz import fuzz, process as fuzz_process
 
 from nicknames import expand_first_name
+from scoring import professional_composite, confidence_from_score
 
 BASE_DIR       = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR       = os.path.join(BASE_DIR, "data")
@@ -127,7 +128,11 @@ def load_center_confirmations():
 
 
 def get_confirmed_npi(center_id):
-    return _center_approved.get(center_id) or _center_high.get(center_id)
+    if center_id in _center_approved:
+        return _center_approved[center_id], "approved"
+    if center_id in _center_high:
+        return _center_high[center_id], "inferred"
+    return None, None
 
 
 # ---------------------------------------------------------------------------
@@ -268,26 +273,6 @@ def score_individual(row, last_name, name_expansions):
     return last_score * 0.6 + first_score * 0.4
 
 
-def confidence_and_signals(name_score, city_match, cred_match, tax_match):
-    signals = []
-    if name_score >= 0.85:
-        signals.append("name")
-    elif name_score >= 0.80:
-        signals.append("name_good")
-    if city_match:   signals.append("city")
-    if cred_match:   signals.append("credential")
-    if tax_match:    signals.append("taxonomy")
-
-    if name_score >= 0.85 and city_match and cred_match and tax_match:
-        return "HIGH", "|".join(signals)
-    if name_score >= 0.80 and city_match and (cred_match or tax_match):
-        return "MEDIUM", "|".join(signals)
-    if name_score >= 0.65 and (city_match or cred_match or tax_match):
-        return "LOW", "|".join(signals)
-    if name_score >= 0.65:
-        return "LOW", "|".join(signals) if signals else "name_only"
-    return "LOW", "|".join(signals) if signals else ""
-
 
 def rank_candidates(all_rows, all_last_names, last_name, name_expansions, prefixes):
     """rapidfuzz pre-filter on last name, then full score. Returns top TOP_N."""
@@ -360,9 +345,10 @@ def process_professional(args):
     prefixes        = TAXONOMY_PREFIXES.get(prof_type, [])
 
     # --- Phase 2: try center-anchor search first ---
-    anchored       = False
-    confirmed_npi  = get_confirmed_npi(center_id)
-    anchor_city    = center_city
+    anchored      = False
+    anchor_type   = None
+    confirmed_npi, anchor_type = get_confirmed_npi(center_id)
+    anchor_city   = center_city
 
     if confirmed_npi:
         loc = get_center_location(confirmed_npi)
@@ -388,6 +374,9 @@ def process_professional(args):
         return [{**base, "rank": "", "confidence": "NO_MATCH", "match_score": "",
                  "signals_matched": "", **empty, "action": "NEEDS_REVIEW"}]
 
+    is_unique    = len(top) < 2 or (top[0][0] - top[1][0] >= 0.15)
+    city_missing = not anchored and not bool(anchor_city)
+
     out_rows = []
     for rank, (score, row) in enumerate(top, 1):
         city_match = bool(
@@ -397,16 +386,28 @@ def process_professional(args):
         cred_match = credential_aligns(prof_type, row.get("credential", ""))
         tax_match  = taxonomy_matches(row, prefixes)
 
-        confidence, signals = confidence_and_signals(score, city_match, cred_match, tax_match)
+        if anchored and anchor_type == "approved":
+            city_val = 1.0
+        else:
+            city_val = 1.0 if city_match else 0.0
+
+        composite, signals = professional_composite(
+            score, city_val, cred_match, tax_match,
+            city_missing=city_missing,
+            is_unique=(rank == 1 and is_unique),
+        )
+        confidence = confidence_from_score(composite)
+
         if anchored:
-            signals = signals + "|anchor" if signals else "anchor"
+            anchor_signal = "anchor_approved" if anchor_type == "approved" else "anchor_inferred"
+            signals = signals + [anchor_signal]
 
         out_rows.append({
             **base,
             "rank":                rank,
             "confidence":          confidence,
-            "match_score":         f"{score:.3f}",
-            "signals_matched":     signals,
+            "match_score":         f"{composite:.3f}",
+            "signals_matched":     "|".join(signals),
             "nppes_npi":           row["npi"],
             "nppes_first_name":    row["first_name"]        or "",
             "nppes_last_name":     row["last_name"]         or "",
@@ -467,7 +468,10 @@ def main():
         with ThreadPoolExecutor(max_workers=WORKERS) as executor:
             for result_rows in executor.map(process_professional, args):
                 writer.writerows(result_rows)
-                if result_rows and "anchor" in (result_rows[0].get("signals_matched") or ""):
+                if result_rows and (
+                    "anchor_approved" in (result_rows[0].get("signals_matched") or "") or
+                    "anchor_inferred" in (result_rows[0].get("signals_matched") or "")
+                ):
                     phase2_count += 1
                 completed += 1
                 if completed % 500 == 0:

@@ -23,6 +23,7 @@ from concurrent.futures import ThreadPoolExecutor
 from rapidfuzz import fuzz, process as fuzz_process
 
 from nicknames import expand_first_name
+from scoring import professional_composite, confidence_from_score
 
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR   = os.path.join(BASE_DIR, "data")
@@ -147,44 +148,6 @@ def score_individual(row, last_name, name_expansions):
     return last_score * 0.6 + first_score * 0.4
 
 
-def confidence_and_signals(name_score, city_match, cred_match, tax_match):
-    """
-    Multi-signal confidence for professionals.
-
-    HIGH   = name >= 0.85 AND city matches AND credential aligns AND taxonomy matches.
-             All four signals must fire. Even so, phase 2 center-anchor matching
-             is needed for true 100% certainty on professionals.
-    MEDIUM = name >= 0.80 AND city matches AND (credential OR taxonomy matches).
-    LOW    = name >= 0.65 with at least one supporting signal.
-    """
-    signals = []
-
-    if name_score >= 0.85:
-        signals.append("name")
-    elif name_score >= 0.80:
-        signals.append("name_good")
-
-    if city_match:
-        signals.append("city")
-    if cred_match:
-        signals.append("credential")
-    if tax_match:
-        signals.append("taxonomy")
-
-    if name_score >= 0.85 and city_match and cred_match and tax_match:
-        return "HIGH", "|".join(signals)
-
-    if name_score >= 0.80 and city_match and (cred_match or tax_match):
-        return "MEDIUM", "|".join(signals)
-
-    if name_score >= 0.65 and (city_match or cred_match or tax_match):
-        return "LOW", "|".join(signals)
-
-    if name_score >= 0.65:
-        return "LOW", "|".join(signals) if signals else "name_only"
-
-    return "LOW", "|".join(signals) if signals else ""
-
 
 def process_professional(args):
     prof, center_lookup = args
@@ -256,6 +219,9 @@ def process_professional(args):
         return [{**base, "rank": "", "confidence": "NO_MATCH", "match_score": "",
                  "signals_matched": "", **empty, "action": "NEEDS_REVIEW"}]
 
+    is_unique    = len(top) < 2 or (top[0][0] - top[1][0] >= 0.15)
+    city_missing = not bool(center_city)
+
     out_rows = []
     for rank, (score, row) in enumerate(top, 1):
         city_match = bool(
@@ -265,14 +231,20 @@ def process_professional(args):
         cred_match = credential_aligns(prof_type, row.get("credential", ""))
         tax_match  = taxonomy_matches(row, prefixes)
 
-        confidence, signals = confidence_and_signals(score, city_match, cred_match, tax_match)
+        city_val = 1.0 if city_match else 0.0
+        composite, signals = professional_composite(
+            score, city_val, cred_match, tax_match,
+            city_missing=city_missing,
+            is_unique=(rank == 1 and is_unique),
+        )
+        confidence = confidence_from_score(composite)
 
         out_rows.append({
             **base,
             "rank":                rank,
             "confidence":          confidence,
-            "match_score":         f"{score:.3f}",
-            "signals_matched":     signals,
+            "match_score":         f"{composite:.3f}",
+            "signals_matched":     "|".join(signals),
             "nppes_npi":           row["npi"],
             "nppes_first_name":    row["first_name"]        or "",
             "nppes_last_name":     row["last_name"]         or "",
