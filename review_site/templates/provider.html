@@ -4,6 +4,12 @@
 {% endblock %}
 {% block content %}
 
+<style>
+  @media (max-width: 720px) {
+    .bw-provider-grid { grid-template-columns: 1fr !important; }
+  }
+</style>
+
 {% if not nppes %}
   <div class="bw-card" style="padding:32px;">
     <p class="text-muted">NPI <span class="mono">{{ npi }}</span> not found in local database. Make sure <code>build_local_db.py</code> has been run.</p>
@@ -11,12 +17,13 @@
 {% else %}
 
 {% set display_name = nppes.org_name or (nppes.first_name ~ ' ' ~ (nppes.last_name or '')) %}
+{% set name_type_labels = {1: "Former Legal", 2: "Other", 3: "DBA", 4: "Former Legal (Business)", 5: "Other Business"} %}
 
 <!-- Page header -->
 <div class="bw-page-header" style="margin-bottom:24px;">
   <div>
     <h1>{{ display_name }}{% if nppes.credential %}<span style="font-size:16px;font-weight:400;color:var(--bw-muted);margin-left:8px;">{{ nppes.credential }}</span>{% endif %}</h1>
-    <div style="margin-top:4px;display:flex;align-items:center;gap:10px;">
+    <div style="margin-top:4px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
       <span class="text-muted mono" style="font-size:13px;">NPI {{ npi }}</span>
       {% if nppes.entity_type == 1 %}<span class="bw-badge bw-badge--pending">Type 1 — Individual</span>
       {% elif nppes.entity_type == 2 %}<span class="bw-badge bw-badge--navy">Type 2 — Organization</span>{% endif %}
@@ -25,11 +32,195 @@
       {% else %}<span class="bw-badge bw-badge--high">Active</span>{% endif %}
     </div>
   </div>
-  <button onclick="history.back()" class="bw-btn bw-btn--ghost bw-btn--sm">← Back</button>
+  <button onclick="window.close(); return false;" class="bw-btn bw-btn--ghost bw-btn--sm">Close tab</button>
+</div>
+
+{% if nppes.deactivation_date %}
+<div role="alert" style="margin-bottom:20px;padding:12px 16px;border-radius:var(--bw-r-md);border:1px solid var(--bw-warn-border);background:var(--bw-warn-bg);display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--bw-warn);">
+  <span aria-hidden="true" style="font-weight:700;flex-shrink:0;">!</span>
+  <span>This NPI was deactivated on <strong>{{ nppes.deactivation_date }}</strong>. Do not approve a deactivated provider.</span>
+</div>
+{% endif %}
+
+<!-- Combined Profile -->
+<div class="bw-card" style="margin-bottom:20px;">
+  <div class="bw-card__header bw-card__header--navy">
+    <h2 style="color:#fff;">Combined Profile</h2>
+    <p style="font-size:12px;color:rgba(255,255,255,0.60);margin-top:2px;">All available information in one place</p>
+  </div>
+  <div class="bw-card__body">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;font-size:13px;">
+
+      {% set name = (hhl.hhl_name if hhl and hhl.hhl_name else display_name) %}
+      {% if name %}
+      <div>
+        <p class="eyebrow" style="margin-bottom:4px;">Name</p>
+        <p style="font-weight:600;">{{ name }}{% if nppes.credential %}, {{ nppes.credential }}{% endif %}</p>
+      </div>
+      {% endif %}
+
+      <div>
+        <p class="eyebrow" style="margin-bottom:4px;">NPI</p>
+        <p class="mono">{{ npi }}</p>
+      </div>
+
+      {% if nppes.entity_type %}
+      <div>
+        <p class="eyebrow" style="margin-bottom:4px;">NPI Type</p>
+        <p>{% if nppes.entity_type == 1 %}Type 1 — Individual{% elif nppes.entity_type == 2 %}Type 2 — Organization{% endif %}</p>
+      </div>
+      {% endif %}
+
+      {% if hhl and hhl.get('hhl_type') %}
+      <div>
+        <p class="eyebrow" style="margin-bottom:4px;">Professional Type</p>
+        <p>{{ hhl.hhl_type }}</p>
+      </div>
+      {% endif %}
+
+      {% if hhl and hhl.get('hhl_email') %}
+      <div>
+        <p class="eyebrow" style="margin-bottom:4px;">Email</p>
+        <p><a href="mailto:{{ hhl.hhl_email }}" class="text-brand" style="text-decoration:none;">{{ hhl.hhl_email }}</a></p>
+      </div>
+      {% endif %}
+
+      {% set phone = nppes.practice_phone or nppes.mailing_phone %}
+      {% if phone %}
+      <div>
+        <p class="eyebrow" style="margin-bottom:4px;">Phone</p>
+        <p>{{ phone }}</p>
+      </div>
+      {% endif %}
+
+      {% if hhl and hhl.get('hhl_center_name') %}
+      <div>
+        <p class="eyebrow" style="margin-bottom:4px;">Medical Center</p>
+        <p>{{ hhl.hhl_center_name }}</p>
+      </div>
+      {% endif %}
+
+      {% if nppes.parent_org_name %}
+      <div>
+        <p class="eyebrow" style="margin-bottom:4px;">Parent Organization</p>
+        <p>{{ nppes.parent_org_name }}</p>
+      </div>
+      {% endif %}
+
+      {% if hhl and hhl.hhl_state %}
+      <div>
+        <p class="eyebrow" style="margin-bottom:4px;">State</p>
+        <p>{{ hhl.hhl_state }}</p>
+      </div>
+      {% endif %}
+
+      {% if nppes.enumeration_date %}
+      <div>
+        <p class="eyebrow" style="margin-bottom:4px;">NPI Issued</p>
+        <p>{{ nppes.enumeration_date }}</p>
+      </div>
+      {% endif %}
+
+      {% if nppes.last_update_date %}
+      <div>
+        <p class="eyebrow" style="margin-bottom:4px;">Last Updated</p>
+        <p>{{ nppes.last_update_date }}</p>
+      </div>
+      {% endif %}
+
+      {% if nppes.deactivation_date %}
+      <div>
+        <p class="eyebrow" style="margin-bottom:4px;">Deactivated</p>
+        <p style="color:var(--bw-error);font-weight:600;">{{ nppes.deactivation_date }}</p>
+      </div>
+      {% endif %}
+
+      {% if nppes.is_sole_proprietor and nppes.is_sole_proprietor | string | upper in ('Y', 'YES', 'X', 'TRUE', '1') %}
+      <div>
+        <p class="eyebrow" style="margin-bottom:4px;">Sole Proprietor</p>
+        <p>Yes</p>
+      </div>
+      {% endif %}
+
+      {% if hhl and hhl.get('hhl_url') %}
+      <div style="grid-column:1 / -1;">
+        <p class="eyebrow" style="margin-bottom:4px;">HHL URL</p>
+        <p><a href="{{ hhl.hhl_url }}" target="_blank" class="text-brand" style="text-decoration:none;word-break:break-all;">{{ hhl.hhl_url }}</a></p>
+      </div>
+      {% endif %}
+
+      {% set addr = nppes.practice_address1 or nppes.mailing_address1 %}
+      {% set city = nppes.practice_city or nppes.mailing_city %}
+      {% set state = nppes.practice_state or nppes.mailing_state %}
+      {% set zip = nppes.practice_zip or nppes.mailing_zip %}
+      {% if addr %}
+      <div style="grid-column:1 / -1;">
+        <p class="eyebrow" style="margin-bottom:4px;">Primary Address</p>
+        <p>{{ addr }}, {{ city }}, {{ state }} {{ zip }}</p>
+      </div>
+      {% endif %}
+
+      {% if nppes.mailing_address1 and nppes.mailing_address1 != nppes.practice_address1 %}
+      <div style="grid-column:1 / -1;">
+        <p class="eyebrow" style="margin-bottom:4px;">Mailing Address</p>
+        <p>{{ nppes.mailing_address1 }}, {{ nppes.mailing_city }}, {{ nppes.mailing_state }} {{ nppes.mailing_zip }}</p>
+      </div>
+      {% endif %}
+
+      {% if nppes.taxonomies %}
+      <div style="grid-column:1 / -1;">
+        <p class="eyebrow" style="margin-bottom:6px;">Taxonomy</p>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;">
+          {% for tax in nppes.taxonomies %}
+            {% if tax.is_primary %}
+              <span class="bw-badge bw-badge--gray">{{ tax.taxonomy_code }} — Primary</span>
+            {% else %}
+              <span class="mono text-muted" style="font-size:12px;background:var(--bw-surface);padding:2px 8px;border-radius:var(--bw-r-sm);border:1px solid var(--bw-rule);">{{ tax.taxonomy_code }}</span>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      {% if nppes.other_names %}
+      <div style="grid-column:1 / -1;">
+        <p class="eyebrow" style="margin-bottom:6px;">Other Names / DBA</p>
+        <div style="display:flex;flex-direction:column;gap:3px;">
+          {% for n in nppes.other_names %}
+            <p class="text-muted" style="font-size:12px;">{{ n.other_name }}{% if n.name_type %} — {{ name_type_labels.get(n.name_type, 'Type ' ~ n.name_type) }}{% endif %}</p>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      {% if nppes.practice_locations %}
+      <div style="grid-column:1 / -1;">
+        <p class="eyebrow" style="margin-bottom:6px;">Additional Locations</p>
+        <div style="display:flex;flex-direction:column;gap:2px;">
+          {% for loc in nppes.practice_locations %}
+            <p class="text-muted" style="font-size:12px;">{{ loc.address1 }}, {{ loc.city }}, {{ loc.state }} {{ loc.zip }}{% if loc.phone %} · {{ loc.phone }}{% endif %}</p>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      {% if nppes.endpoints %}
+      <div style="grid-column:1 / -1;">
+        <p class="eyebrow" style="margin-bottom:6px;">HIE Endpoints</p>
+        <div style="display:flex;flex-direction:column;gap:2px;">
+          {% for ep in nppes.endpoints %}
+            <p class="mono text-brand" style="font-size:12px;">{{ ep.endpoint }} <span class="text-muted" style="font-family:var(--bw-font-body);">({{ ep.endpoint_type }})</span></p>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
 </div>
 
 <!-- Two-column data grid -->
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;">
+<div class="bw-provider-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;">
 
   <!-- HHL Data -->
   <div class="bw-card">
@@ -86,7 +277,7 @@
         <dd class="mono" style="margin:0;font-weight:600;">{{ npi }}</dd>
 
         {% if nppes.enumeration_date %}
-          <dt class="text-muted">Enumerated</dt>
+          <dt class="text-muted">NPI Issued</dt>
           <dd style="margin:0;">{{ nppes.enumeration_date }}</dd>
         {% endif %}
 
@@ -95,9 +286,9 @@
           <dd style="margin:0;">{{ nppes.last_update_date }}</dd>
         {% endif %}
 
-        {% if nppes.is_sole_proprietor %}
+        {% if nppes.is_sole_proprietor and nppes.is_sole_proprietor | string | upper in ('Y', 'YES', 'X', 'TRUE', '1') %}
           <dt class="text-muted">Sole Proprietor</dt>
-          <dd style="margin:0;">{{ nppes.is_sole_proprietor }}</dd>
+          <dd style="margin:0;">Yes</dd>
         {% endif %}
 
         {% if nppes.mailing_address1 %}
@@ -146,12 +337,13 @@
 <div class="bw-card" style="margin-bottom:20px;">
   <div class="bw-card__header">
     <h2>Taxonomy</h2>
+    <p class="text-muted" style="font-size:12px;margin-top:2px;">Specialty codes from the NUCC taxonomy. Verify against the HHL record.</p>
   </div>
   <div style="font-size:13px;">
     {% for tax in nppes.taxonomies %}
     <div style="padding:10px 24px;{% if not loop.first %}border-top:1px solid var(--bw-rule);{% endif %}display:flex;align-items:center;gap:10px;">
       <span class="mono text-muted">{{ tax.taxonomy_code }}</span>
-      {% if tax.is_primary %}<span class="bw-badge bw-badge--pending">Primary</span>{% endif %}
+      {% if tax.is_primary %}<span class="bw-badge bw-badge--gray">Primary</span>{% endif %}
     </div>
     {% endfor %}
   </div>
@@ -168,7 +360,9 @@
     {% for n in nppes.other_names %}
     <div style="padding:10px 24px;{% if not loop.first %}border-top:1px solid var(--bw-rule);{% endif %}">
       {{ n.other_name }}
-      {% if n.name_type %}<span class="text-muted" style="font-size:12px;"> (type {{ n.name_type }})</span>{% endif %}
+      {% if n.name_type %}
+        <span class="text-muted" style="font-size:12px;"> — {{ name_type_labels.get(n.name_type, 'Type ' ~ n.name_type) }}</span>
+      {% endif %}
     </div>
     {% endfor %}
   </div>
@@ -179,7 +373,8 @@
 {% if nppes.endpoints %}
 <div class="bw-card" style="margin-bottom:20px;">
   <div class="bw-card__header">
-    <h2>Health Information Exchange</h2>
+    <h2>HIE Endpoints</h2>
+    <p class="text-muted" style="font-size:12px;margin-top:2px;">Health Information Exchange</p>
   </div>
   <div style="font-size:13px;">
     {% for ep in nppes.endpoints %}
@@ -196,123 +391,6 @@
   </div>
 </div>
 {% endif %}
-
-<!-- Combined Profile -->
-<div class="bw-card" style="margin-bottom:20px;">
-  <div class="bw-card__header bw-card__header--navy">
-    <h2 style="color:#fff;">Combined Profile</h2>
-    <p style="font-size:12px;color:rgba(255,255,255,0.60);margin-top:2px;">All confirmed information in one place</p>
-  </div>
-  <div class="bw-card__body">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;font-size:13px;">
-
-      {% set name = (hhl.hhl_name if hhl and hhl.hhl_name else display_name) %}
-      {% if name %}
-      <div>
-        <p class="bw-eyebrow" style="margin-bottom:4px;">Name</p>
-        <p style="font-weight:600;">{{ name }}{% if nppes.credential %}, {{ nppes.credential }}{% endif %}</p>
-      </div>
-      {% endif %}
-
-      <div>
-        <p class="bw-eyebrow" style="margin-bottom:4px;">NPI</p>
-        <p class="mono">{{ npi }}</p>
-      </div>
-
-      {% if hhl and hhl.get('hhl_type') %}
-      <div>
-        <p class="bw-eyebrow" style="margin-bottom:4px;">Professional Type</p>
-        <p>{{ hhl.hhl_type }}</p>
-      </div>
-      {% endif %}
-
-      {% if nppes.entity_type %}
-      <div>
-        <p class="bw-eyebrow" style="margin-bottom:4px;">NPI Type</p>
-        <p>{% if nppes.entity_type == 1 %}Type 1 — Individual{% elif nppes.entity_type == 2 %}Type 2 — Organization{% endif %}</p>
-      </div>
-      {% endif %}
-
-      {% if hhl and hhl.get('hhl_email') %}
-      <div>
-        <p class="bw-eyebrow" style="margin-bottom:4px;">Email</p>
-        <p><a href="mailto:{{ hhl.hhl_email }}" class="text-brand" style="text-decoration:none;">{{ hhl.hhl_email }}</a></p>
-      </div>
-      {% endif %}
-
-      {% set phone = nppes.practice_phone or nppes.mailing_phone %}
-      {% if phone %}
-      <div>
-        <p class="bw-eyebrow" style="margin-bottom:4px;">Phone</p>
-        <p>{{ phone }}</p>
-      </div>
-      {% endif %}
-
-      {% if hhl and hhl.get('hhl_center_name') %}
-      <div>
-        <p class="bw-eyebrow" style="margin-bottom:4px;">Medical Center</p>
-        <p>{{ hhl.hhl_center_name }}</p>
-      </div>
-      {% endif %}
-
-      {% if nppes.parent_org_name %}
-      <div>
-        <p class="bw-eyebrow" style="margin-bottom:4px;">Parent Organization</p>
-        <p>{{ nppes.parent_org_name }}</p>
-      </div>
-      {% endif %}
-
-      {% set addr = nppes.practice_address1 or nppes.mailing_address1 %}
-      {% set city = nppes.practice_city or nppes.mailing_city %}
-      {% set state = nppes.practice_state or nppes.mailing_state %}
-      {% set zip = nppes.practice_zip or nppes.mailing_zip %}
-      {% if addr %}
-      <div style="grid-column:1 / -1;">
-        <p class="bw-eyebrow" style="margin-bottom:4px;">Primary Address</p>
-        <p>{{ addr }}, {{ city }}, {{ state }} {{ zip }}</p>
-      </div>
-      {% endif %}
-
-      {% if nppes.taxonomies %}
-      <div style="grid-column:1 / -1;">
-        <p class="bw-eyebrow" style="margin-bottom:6px;">Taxonomy</p>
-        <div style="display:flex;flex-wrap:wrap;gap:4px;">
-          {% for tax in nppes.taxonomies %}
-            {% if tax.is_primary %}
-              <span class="bw-badge bw-badge--pending">{{ tax.taxonomy_code }} — Primary</span>
-            {% else %}
-              <span class="mono text-muted" style="font-size:12px;background:var(--bw-surface);padding:2px 8px;border-radius:var(--bw-r-sm);border:1px solid var(--bw-rule);">{{ tax.taxonomy_code }}</span>
-            {% endif %}
-          {% endfor %}
-        </div>
-      </div>
-      {% endif %}
-
-      {% if nppes.practice_locations %}
-      <div style="grid-column:1 / -1;">
-        <p class="bw-eyebrow" style="margin-bottom:6px;">Additional Locations</p>
-        <div style="display:flex;flex-direction:column;gap:2px;">
-          {% for loc in nppes.practice_locations %}
-            <p class="text-muted" style="font-size:12px;">{{ loc.address1 }}, {{ loc.city }}, {{ loc.state }} {{ loc.zip }}</p>
-          {% endfor %}
-        </div>
-      </div>
-      {% endif %}
-
-      {% if nppes.endpoints %}
-      <div style="grid-column:1 / -1;">
-        <p class="bw-eyebrow" style="margin-bottom:6px;">HIE Endpoints</p>
-        <div style="display:flex;flex-direction:column;gap:2px;">
-          {% for ep in nppes.endpoints %}
-            <p class="mono text-brand" style="font-size:12px;">{{ ep.endpoint }} <span class="text-muted" style="font-family:var(--bw-font-body);">({{ ep.endpoint_type }})</span></p>
-          {% endfor %}
-        </div>
-      </div>
-      {% endif %}
-
-    </div>
-  </div>
-</div>
 
 {% endif %}
 {% endblock %}

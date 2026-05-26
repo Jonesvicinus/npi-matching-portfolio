@@ -197,11 +197,11 @@
     .bw-btn--primary:active { background: var(--bw-brand-700); transform: translateY(1px); }
     .bw-btn--secondary { background: var(--bw-secondary); color: #fff; }
     .bw-btn--secondary:hover { background: var(--bw-secondary-80); }
-    .bw-btn--outline  { background: transparent; color: var(--bw-brand); border-color: var(--bw-brand); }
+    .bw-btn--outline  { background: transparent; color: var(--bw-brand-600); border-color: var(--bw-brand-600); }
     .bw-btn--outline:hover  { background: var(--bw-brand-600); color: #fff; border-color: var(--bw-brand-600); }
     .bw-btn--ghost    { background: transparent; color: var(--bw-secondary); border: 1.5px solid var(--bw-rule); }
     .bw-btn--ghost:hover    { background: var(--bw-brand-tint-10); color: var(--bw-brand-600); border-color: var(--bw-brand-600); }
-    .bw-btn--danger   { background: transparent; color: var(--bw-error); border: 1.5px solid var(--bw-rule); }
+    .bw-btn--danger   { background: transparent; color: var(--bw-error); border: 1.5px solid rgba(219,0,0,0.28); }
     .bw-btn--danger:hover   { background: var(--bw-error-bg); border-color: var(--bw-error); }
     .bw-btn--warn     { background: transparent; color: var(--bw-warn); border: 1.5px solid var(--bw-warn-border); }
     .bw-btn--warn:hover     { background: var(--bw-warn-bg); border-color: var(--bw-warn); }
@@ -214,6 +214,20 @@
     .bw-btn--sm       { padding: 8px 14px; font-size: 12px; }
     .bw-btn[disabled] { background: var(--bw-disabled); color: #8B8B8B; border-color: transparent; cursor: not-allowed; }
     .bw-btn:focus-visible { outline: 2px solid var(--bw-brand); outline-offset: 2px; }
+    .bw-btn--confirming {
+      background: var(--bw-warn-bg) !important;
+      color: var(--bw-warn) !important;
+      border-color: var(--bw-warn-border) !important;
+      animation: confirmPulse .25s ease-out;
+    }
+    @keyframes confirmPulse {
+      0%   { transform: scale(1); }
+      50%  { transform: scale(1.06); }
+      100% { transform: scale(1); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .bw-btn--confirming { animation: none; }
+    }
 
     /* ── Inputs & Selects ────────────────────────────────── */
     .bw-input, .bw-select {
@@ -391,6 +405,8 @@
       padding: 18px 24px;
       margin-bottom: 28px;
     }
+    summary { list-style: none; }
+    summary::-webkit-details-marker { display: none; }
     .bw-pagination {
       display: flex;
       align-items: center;
@@ -468,10 +484,23 @@
       animation: flashFade 6s ease forwards;
       margin-bottom: 20px;
     }
+    .bw-flash__body { flex: 1; }
+    .bw-flash__dismiss {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0 0 0 12px;
+      color: inherit;
+      opacity: 0.55;
+      font-size: 18px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .bw-flash__dismiss:hover { opacity: 1; }
     .bw-flash--approved { background: var(--bw-success-bg); color: var(--bw-success); }
     .bw-flash--rejected { background: var(--bw-error-bg);   color: var(--bw-error); }
     .bw-flash--flagged  { background: #FFF0E0; color: #9A3A00; }
-    .bw-flash--info     { background: var(--bw-tertiary);   color: var(--bw-brand-600); }
+    .bw-flash--info     { background: var(--bw-tertiary);   color: var(--bw-brand-600); animation-duration: 12s; }
 
     @media (prefers-reduced-motion: reduce) {
       .bw-flash         { animation: none; }
@@ -589,7 +618,8 @@
         {% for category, message in messages %}
           <div class="bw-flash bw-flash--{{ category }}" role="status" aria-live="polite">
             <span aria-hidden="true">{% if category == 'approved' %}✓{% elif category == 'rejected' %}✕{% elif category == 'flagged' %}⚑{% else %}·{% endif %}</span>
-            {{ message }}
+            <span class="bw-flash__body">{{ message }}</span>
+            <button type="button" class="bw-flash__dismiss" aria-label="Dismiss" onclick="this.closest('.bw-flash').style.display='none'">×</button>
           </div>
         {% endfor %}
       {% endif %}

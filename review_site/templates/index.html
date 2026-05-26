@@ -37,8 +37,8 @@
         <a href="/centers" class="bw-btn bw-btn--outline bw-btn--sm">Review centers →</a>
         <form action="/bulk-approve/center" method="post">
           {% if stats.center_pending_high > 0 %}
-          <button class="bw-btn bw-btn--approve bw-btn--sm"
-                  onclick="return confirm('Approve all {{ stats.center_pending_high }} pending HIGH confidence centers? This cannot be undone in bulk.')">
+          <button type="button" class="bw-btn bw-btn--approve bw-btn--sm"
+                  onclick="confirmBulk(this, event, {{ stats.center_pending_high }}, 'centers')">
             Bulk approve HIGH ({{ stats.center_pending_high }})
           </button>
           {% else %}
@@ -78,8 +78,8 @@
         <a href="/professionals" class="bw-btn bw-btn--outline bw-btn--sm">Review professionals →</a>
         <form action="/bulk-approve/professional" method="post">
           {% if stats.prof_pending_high > 0 %}
-          <button class="bw-btn bw-btn--approve bw-btn--sm"
-                  onclick="return confirm('Approve all {{ stats.prof_pending_high }} pending HIGH confidence professionals? This cannot be undone in bulk.')">
+          <button type="button" class="bw-btn bw-btn--approve bw-btn--sm"
+                  onclick="confirmBulk(this, event, {{ stats.prof_pending_high }}, 'professionals')">
             Bulk approve HIGH ({{ stats.prof_pending_high }})
           </button>
           {% else %}
@@ -101,5 +101,27 @@
     <a href="/export" class="bw-btn bw-btn--primary">Download hhl_confirmed.csv</a>
   </div>
 </div>
+
+<script>
+  function confirmBulk(btn, e, count, label) {
+    e.preventDefault();
+    if (btn.dataset.confirming) {
+      clearTimeout(btn._bulkTimer);
+      btn.closest('form').submit();
+      return;
+    }
+    btn.dataset.confirming = '1';
+    btn._origText = btn.textContent;
+    btn._origClass = btn.className;
+    btn.classList.add('bw-btn--confirming');
+    btn.classList.remove('bw-btn--approve');
+    btn.textContent = `Confirm? Approves ${count} ${label}`;
+    btn._bulkTimer = setTimeout(() => {
+      delete btn.dataset.confirming;
+      btn.className = btn._origClass;
+      btn.textContent = btn._origText;
+    }, 4000);
+  }
+</script>
 
 {% endblock %}

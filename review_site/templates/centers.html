@@ -50,17 +50,21 @@
       <option value="name"  {% if sort == 'name'  %}selected{% endif %}>Sort: Name A–Z</option>
       <option value="state" {% if sort == 'state' %}selected{% endif %}>Sort: State</option>
     </select>
-    <select name="per_page" class="bw-select" style="width:130px;">
+    <select name="per_page" id="filter-per-page" class="bw-select" style="width:130px;">
       {% for n in [50, 100, 250] %}
         <option value="{{ n }}" {% if per_page == n %}selected{% endif %}>{{ n }} per page</option>
       {% endfor %}
+      {% if total <= 500 or per_page == 999999 %}
       <option value="999999" {% if per_page == 999999 %}selected{% endif %}>Show all</option>
+      {% endif %}
     </select>
     <input type="hidden" name="conf" value="{{ filter_conf }}">
     <input type="hidden" name="dec"  value="{{ filter_dec }}">
     <button type="submit" class="bw-btn bw-btn--primary bw-btn--sm">Apply</button>
     <a href="/centers" class="text-muted" style="font-size:12px;">Reset</a>
   </div>
+  {% set conf_labels = {"all": "All", "HIGH": "High", "MEDIUM": "Medium", "LOW": "Low", "NO_MATCH": "No Candidates"} %}
+  {% set dec_labels  = {"all": "All", "PENDING": "Pending", "APPROVED": "Approved", "FLAGGED": "Flagged", "REJECTED": "No Match"} %}
   <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;">
     <div style="display:flex;align-items:center;gap:6px;">
       <span class="bw-tip eyebrow" tabindex="0">Confidence
@@ -69,13 +73,12 @@
       </span>
       {% for c in ["all","HIGH","MEDIUM","LOW","NO_MATCH"] %}
         <a href="/centers?conf={{ c }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}"
-           class="bw-chip {% if filter_conf == c %}bw-chip--active{% endif %}">{{ c }}</a>
+           class="bw-chip {% if filter_conf == c %}bw-chip--active{% endif %}">{{ conf_labels[c] }}</a>
       {% endfor %}
     </div>
     <div style="display:flex;align-items:center;gap:6px;">
       <span class="eyebrow">Decision</span>
-      {% set dec_labels = {"all": "All", "PENDING": "Pending", "APPROVED": "Approved", "REJECTED": "No Match", "FLAGGED": "Flagged"} %}
-      {% for d in ["all","PENDING","APPROVED","REJECTED","FLAGGED"] %}
+      {% for d in ["all","PENDING","APPROVED","FLAGGED","REJECTED"] %}
         <a href="/centers?conf={{ filter_conf }}&dec={{ d }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}"
            class="bw-chip {% if filter_dec == d %}bw-chip--active{% endif %}">{{ dec_labels[d] }}</a>
       {% endfor %}
@@ -85,7 +88,8 @@
 
 {% if not items %}
   <div class="bw-card" style="padding:48px;text-align:center;">
-    <p class="text-muted">No records match the current filters.</p>
+    <p class="text-muted" style="margin-bottom:10px;">No records match the current filters.</p>
+    <a href="/centers" class="bw-btn bw-btn--ghost bw-btn--sm">Clear filters</a>
   </div>
 {% endif %}
 
@@ -114,9 +118,8 @@
         {% endif %}
         <form action="/undecide/center/{{ item.hhl_id }}" method="post" style="display:inline;">
           <input type="hidden" name="back" value="/centers?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&page={{ page }}">
-          <button type="submit"
-                  data-confirm="Remove decision for {{ item.meta.hhl_name }}?"
-                  onclick="return confirm(this.dataset.confirm)"
+          <button type="button"
+                  onclick="confirmUndo(this, event)"
                   class="bw-btn bw-btn--danger bw-btn--sm">Undo</button>
         </form>
         <span class="text-muted" style="font-size:11px;" aria-hidden="true">▾</span>
@@ -172,15 +175,17 @@
   </div>
 
   {% if not item.candidates %}
-    <div style="padding:14px 24px;font-size:13px;" class="text-muted">No NPPES candidates found.</div>
-    <div style="padding:12px 24px;border-top:1px solid var(--bw-rule);background:var(--bw-surface-subtle);display:flex;gap:8px;">
-      <form action="/decide/center/{{ item.hhl_id }}" method="post" style="display:flex;gap:8px;">
-        <input type="hidden" name="back" value="/centers?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&page={{ page }}">
-        <input type="hidden" name="nppes_npi" value="">
-        <button name="decision" value="FLAGGED"  class="bw-btn bw-btn--warn bw-btn--sm">Flag</button>
-        <button name="decision" value="REJECTED" class="bw-btn bw-btn--danger bw-btn--sm">No Match</button>
-      </form>
+    <div style="padding:14px 24px;">
+      <p style="font-size:13px;color:var(--bw-ink-2);margin-bottom:4px;">No NPPES candidates found.</p>
+      <p style="font-size:12px;" class="text-muted">Use <strong>No Match</strong> if you're confident this provider isn't in NPPES. Use <strong>Flag</strong> if you're not sure or want a second look.</p>
     </div>
+    <form action="/decide/center/{{ item.hhl_id }}" method="post" style="padding:12px 24px;border-top:1px solid var(--bw-rule);background:var(--bw-surface-subtle);display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <input type="hidden" name="back" value="/centers?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&page={{ page }}">
+      <input type="hidden" name="nppes_npi" value="">
+      <input type="text" name="notes" placeholder="Notes (optional)" aria-label="Notes" class="bw-input" style="width:180px;padding:7px 10px;font-size:12px;" maxlength="500">
+      <button type="button" data-decision="FLAGGED"  class="bw-btn bw-btn--warn bw-btn--sm"   onclick="confirmDecision(this, event)">Flag</button>
+      <button type="button" data-decision="REJECTED" class="bw-btn bw-btn--danger bw-btn--sm" onclick="confirmDecision(this, event)">No Match</button>
+    </form>
 
   {% else %}
     {% set best = item.candidates[0] %}
@@ -195,7 +200,7 @@
         </div>
 
         <div style="flex:1;min-width:0;">
-          <div style="font-weight:700;font-size:14px;color:var(--bw-secondary);">{{ best.nppes_name }}</div>
+          <div style="font-weight:600;font-size:14px;color:var(--bw-ink-2);">{{ best.nppes_name }}</div>
           <div class="text-muted mono" style="font-size:12px;margin-top:3px;">{{ best.nppes_npi }}{% if best.match_source == "other_name" %} <span style="font-family:var(--bw-font-body);color:var(--bw-purple);">· via alternate name</span>{% endif %}</div>
           {% if best.nppes_address %}<div class="text-muted" style="font-size:12px;margin-top:2px;">{{ best.nppes_address }}, {{ best.nppes_city }}, {{ best.nppes_state }} {{ best.nppes_zip }}</div>{% endif %}
           {% if best.nppes_phone %}<div class="text-muted" style="font-size:12px;">{{ best.nppes_phone }}</div>{% endif %}
@@ -215,34 +220,34 @@
 
         <div style="flex-shrink:0;display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
           <a href="/provider/{{ best.nppes_npi }}" target="_blank" class="bw-btn bw-btn--ghost bw-btn--sm">Profile</a>
-          {% if best.nppes_npi in approved_by_npi %}
-            {% for dup in approved_by_npi[best.nppes_npi] %}
-              {% if dup.hhl_id != item.hhl_id %}
-                <span class="bw-tip bw-badge bw-badge--medium" tabindex="0" style="font-size:11px;cursor:help;">
-                  Also approved: {{ dup.name }}
-                  <span role="tooltip" class="bw-tip__body bw-tip__body--right">This NPI is already approved for {{ dup.name }}. One NPI for multiple records is OK if the same provider serves both. Review carefully to confirm this is intentional.</span>
-                </span>
-              {% endif %}
-            {% endfor %}
-          {% endif %}
         </div>
       </div>
 
+      <!-- Duplicate NPI warning banner -->
+      {% if best.nppes_npi in approved_by_npi %}
+        {% for dup in approved_by_npi[best.nppes_npi] %}
+          {% if dup.hhl_id != item.hhl_id %}
+          <div role="alert" style="margin:8px 24px 0;padding:10px 14px;border-radius:6px;border:1px solid var(--bw-warn-border);background:var(--bw-warn-bg);display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--bw-warn);">
+            <span aria-hidden="true" style="font-weight:700;flex-shrink:0;">!</span>
+            <span>NPI already approved for <strong>{{ dup.name }}</strong>. One NPI for multiple records is allowed if the same provider serves both. Review carefully before confirming.</span>
+          </div>
+          {% endif %}
+        {% endfor %}
+      {% endif %}
+
       <!-- Action bar -->
-      <div class="bw-action-bar">
-        <form action="/decide/center/{{ item.hhl_id }}" method="post" style="display:inline;">
-          <input type="hidden" name="back" value="/centers?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&page={{ page }}">
-          <input type="hidden" name="nppes_npi" value="{{ best.nppes_npi }}">
-          <button name="decision" value="APPROVED" class="bw-btn bw-btn--success">✓ Confirm Match</button>
-        </form>
-        <form action="/decide/center/{{ item.hhl_id }}" method="post" style="display:flex;gap:8px;align-items:center;">
-          <input type="hidden" name="back" value="/centers?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&page={{ page }}">
-          <input type="hidden" name="nppes_npi" value="">
-          <input type="text" name="notes" placeholder="Notes (optional)" aria-label="Notes" class="bw-input" style="width:180px;padding:7px 10px;font-size:12px;" maxlength="500">
-          <button name="decision" value="FLAGGED"  class="bw-btn bw-btn--warn bw-btn--sm">Flag</button>
-          <button name="decision" value="REJECTED" class="bw-btn bw-btn--danger bw-btn--sm">No Match</button>
-        </form>
-      </div>
+      <form action="/decide/center/{{ item.hhl_id }}" method="post" class="bw-action-bar">
+        <input type="hidden" name="back" value="/centers?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&page={{ page }}">
+        <input type="hidden" name="nppes_npi" value="{{ best.nppes_npi }}">
+        <input type="text" name="notes" placeholder="Notes (optional)" aria-label="Notes" class="bw-input" style="width:180px;padding:7px 10px;font-size:12px;" maxlength="500">
+        <button type="button" data-decision="APPROVED" class="bw-btn bw-btn--success" onclick="confirmDecision(this, event)">✓ Confirm Match</button>
+        <button type="button" data-decision="FLAGGED" data-npi="" class="bw-btn bw-btn--warn bw-btn--sm" onclick="confirmDecision(this, event)">Flag</button>
+        <span class="bw-tip" tabindex="0" style="display:inline-flex;align-items:center;margin-left:-2px;">
+          <span class="bw-tip__icon" aria-hidden="true">?</span>
+          <span role="tooltip" class="bw-tip__body">Flag when you're unsure or want a second opinion. Use No Match when you're confident this provider isn't in NPPES.</span>
+        </span>
+        <button type="button" data-decision="REJECTED" data-npi="" class="bw-btn bw-btn--danger bw-btn--sm" onclick="confirmDecision(this, event)">No Match</button>
+      </form>
     </div>
 
     <!-- More candidates (collapsed) -->
@@ -282,7 +287,7 @@
           <form action="/decide/center/{{ item.hhl_id }}" method="post">
             <input type="hidden" name="back" value="/centers?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&page={{ page }}">
             <input type="hidden" name="nppes_npi" value="{{ cand.nppes_npi }}">
-            <button name="decision" value="APPROVED" class="bw-btn bw-btn--success bw-btn--sm">Approve #{{ cand.rank }}</button>
+            <button type="button" data-decision="APPROVED" class="bw-btn bw-btn--success bw-btn--sm" onclick="confirmDecision(this, event)">Approve #{{ cand.rank }}</button>
           </form>
           <a href="/provider/{{ cand.nppes_npi }}" target="_blank" class="bw-btn bw-btn--ghost bw-btn--sm">Profile</a>
         </div>
@@ -306,5 +311,77 @@
 {% else %}
 <p style="text-align:center;margin-top:20px;font-size:12px;" class="text-muted">{{ total }} records</p>
 {% endif %}
+
+<script>
+  function confirmDecision(btn, e) {
+    e.preventDefault();
+    if (btn.dataset.confirming) {
+      clearTimeout(btn._decTimer);
+      const form = btn.closest('form');
+      const inp = document.createElement('input');
+      inp.type = 'hidden';
+      inp.name = 'decision';
+      inp.value = btn.dataset.decision;
+      form.appendChild(inp);
+      if (btn.hasAttribute('data-npi')) {
+        const npiInp = form.querySelector('input[name="nppes_npi"]');
+        if (npiInp) npiInp.value = btn.dataset.npi;
+      }
+      form.submit();
+      return;
+    }
+    btn.closest('form').querySelectorAll('[data-confirming]').forEach(other => resetDecisionBtn(other));
+    btn.dataset.confirming = '1';
+    btn._origText = btn.textContent;
+    btn._origClass = btn.className;
+    btn.classList.add('bw-btn--confirming');
+    btn.classList.remove('bw-btn--success', 'bw-btn--danger', 'bw-btn--warn');
+    btn.textContent = 'Confirm?';
+    btn._decTimer = setTimeout(() => resetDecisionBtn(btn), 3000);
+  }
+
+  function resetDecisionBtn(btn) {
+    clearTimeout(btn._decTimer);
+    delete btn.dataset.confirming;
+    btn.className = btn._origClass;
+    btn.textContent = btn._origText;
+  }
+
+  function confirmUndo(btn, e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (btn.dataset.confirming) {
+      clearTimeout(btn._undoTimer);
+      btn.closest('form').submit();
+      return;
+    }
+    btn.dataset.confirming = '1';
+    btn._origClass = btn.className;
+    btn.classList.add('bw-btn--confirming');
+    btn.classList.remove('bw-btn--danger');
+    btn.textContent = 'Confirm?';
+    btn._undoTimer = setTimeout(() => {
+      delete btn.dataset.confirming;
+      btn.className = btn._origClass;
+      btn.textContent = 'Undo';
+    }, 3000);
+  }
+
+  // Guard "Show all" when record count is large
+  (function () {
+    const form = document.querySelector('form[action="/centers"]');
+    const ppSel = document.getElementById('filter-per-page');
+    const pageTotal = {{ total }};
+    if (form && ppSel) {
+      form.addEventListener('submit', function (e) {
+        if (ppSel.value === '999999' && pageTotal > 300) {
+          if (!confirm('Load all ' + pageTotal + ' records? This may slow your browser.')) {
+            e.preventDefault();
+          }
+        }
+      });
+    }
+  }());
+</script>
 
 {% endblock %}

@@ -31,8 +31,8 @@
       {% set tab_defs = [
         ("all",      "All",      "var(--bw-brand-600)", counts.all),
         ("approved", "Approved", "var(--bw-success)",   counts.approved),
-        ("rejected", "No Match", "var(--bw-error)",     counts.rejected),
         ("flagged",  "Flagged",  "var(--bw-warn)",      counts.flagged),
+        ("rejected", "No Match", "var(--bw-error)",     counts.rejected),
       ] %}
       {% for slug, label, active_color, count in tab_defs %}
       <a href="/decisions?tab={{ slug }}&q={{ search }}&per_page={{ per_page }}&state={{ filter_state }}&hhl_type={{ filter_type }}{% for col, dir in sorts.items() %}&sort_{{ col }}={{ dir }}{% endfor %}"
@@ -67,8 +67,9 @@
       <option value="center"       {% if filter_type == 'center'       %}selected{% endif %}>Centers</option>
       <option value="professional" {% if filter_type == 'professional' %}selected{% endif %}>Professionals</option>
     </select>
+    <span aria-hidden="true" style="width:1px;height:22px;background:var(--bw-rule);flex-shrink:0;align-self:center;margin:0 2px;"></span>
     <label class="sr-only" for="filter-per-page">Records per page</label>
-    <select name="per_page" id="filter-per-page" class="bw-select" style="width:145px;">
+    <select name="per_page" id="filter-per-page" class="bw-select" style="width:140px;">
       {% for n in [25, 50, 100, 250] %}
         <option value="{{ n }}" {% if per_page == n %}selected{% endif %}>{{ n }} per page</option>
       {% endfor %}
@@ -89,7 +90,7 @@
       "type_asc":     "Type A→Z",             "type_desc":     "Type Z→A",
       "state_asc":    "State A→Z",            "state_desc":    "State Z→A",
       "decision_asc": "Decision A→Z",         "decision_desc": "Decision Z→A",
-      "date_asc":     "Date newest first",    "date_desc":     "Date oldest first",
+      "date_asc":     "Date oldest first",     "date_desc":     "Date newest first",
     } %}
     {% for col, dir in sorts.items() %}
       <button type="button" onclick="removeSort('{{ col }}')"
@@ -109,8 +110,14 @@
   <div class="bw-card" style="padding:48px;text-align:center;">
     {% if search or filter_state != 'all' or filter_type != 'all' %}
       <p class="text-muted">No records match the current filters.</p>
+    {% elif tab == 'approved' %}
+      <p class="text-muted">No approved records yet. Confirm matches in the Centers or Professionals queues.</p>
+    {% elif tab == 'rejected' %}
+      <p class="text-muted">No rejected records yet. Decisions appear here after you mark a candidate as No Match.</p>
+    {% elif tab == 'flagged' %}
+      <p class="text-muted">No flagged records. Nothing has been marked for a second look.</p>
     {% else %}
-      <p class="text-muted">No records in this category yet.</p>
+      <p class="text-muted">No decisions recorded yet. Review candidates in the Centers or Professionals queues to get started.</p>
     {% endif %}
   </div>
 {% else %}
@@ -121,12 +128,11 @@
       <tr>
         <th scope="col" style="width:32px;padding:0;"></th>
         {{ sort_th("name",     "HHL Name") }}
-        {{ sort_th("type",     "Type",     "width:100px;") }}
+        {{ sort_th("type",     "Type",     "width:148px;") }}
         {{ sort_th("state",    "State",    "width:68px;") }}
         <th scope="col" style="width:120px;">NPI</th>
         {{ sort_th("decision", "Decision", "width:120px;") }}
         {{ sort_th("date",     "Date",     "width:96px;") }}
-        <th scope="col" style="width:56px;text-align:center;">Note</th>
         <th scope="col" style="width:308px;"><span class="sr-only">Actions</span></th>
       </tr>
     </thead>
@@ -154,16 +160,16 @@
                   aria-expanded="false"
                   style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--bw-muted);width:100%;height:100%;padding:13px 0;display:flex;align-items:center;justify-content:center;">▶</button>
         </td>
-        <td style="font-weight:600;overflow-wrap:break-word;">{{ r.name }}</td>
+        <td style="font-weight:600;overflow-wrap:break-word;">{{ r.name }}{% if r.notes %}<button type="button" class="note-peek" data-note="{{ r.notes | e }}" aria-label="Note: {{ r.notes | e }}" style="display:inline-flex;vertical-align:middle;align-items:center;justify-content:center;width:18px;height:18px;color:var(--bw-brand-600);font-size:12px;font-weight:700;cursor:pointer;margin-left:5px;background:none;border:none;padding:0;">✎</button>{% endif %}</td>
         <td style="white-space:nowrap;">
           {% if r.hhl_type == 'center' %}
             <span class="bw-badge bw-badge--navy">Center</span>
           {% else %}
-            <span class="bw-badge bw-badge--pending" title="Professional">Prof</span>
+            <span class="bw-badge bw-badge--pending">Professional</span>
           {% endif %}
         </td>
         <td class="text-muted" style="white-space:nowrap;font-weight:600;font-size:12px;">{{ r.hhl_state }}</td>
-        <td class="mono text-muted" style="font-size:12px;white-space:nowrap;">{{ r.nppes_npi }}</td>
+        <td class="mono text-muted" style="font-size:12px;white-space:nowrap;font-weight:400;">{{ r.nppes_npi }}</td>
         <td style="white-space:nowrap;">
           {% if r.decision == 'APPROVED' %}<span class="bw-badge bw-badge--approved">APPROVED</span>
           {% elif r.decision == 'REJECTED' %}<span class="bw-badge bw-badge--rejected">NO MATCH</span>
@@ -172,14 +178,6 @@
         </td>
         <td class="text-muted" style="font-size:12px;white-space:nowrap;">
           {% if r.decided_at %}{{ r.decided_at[5:7] }}/{{ r.decided_at[8:10] }}/{{ r.decided_at[2:4] }}{% endif %}
-        </td>
-        <td style="text-align:center;padding:8px 0;">
-          {% if r.notes %}
-          <span class="note-peek" tabindex="0"
-                data-note="{{ r.notes | e }}"
-                aria-label="Note: {{ r.notes | e }}"
-                style="display:inline-flex;align-items:center;justify-content:center;min-width:40px;min-height:40px;color:var(--bw-brand);font-size:18px;font-weight:bold;cursor:pointer;">✎</span>
-          {% endif %}
         </td>
         <td style="white-space:nowrap;">
           <div style="display:flex;gap:6px;justify-content:flex-end;align-items:center;">
@@ -295,9 +293,6 @@
     pointer-events: none;
     display: none;
   }
-  @media (prefers-reduced-motion: reduce) {
-    .bw-btn--confirming { animation: none; }
-  }
   .bw-sort-chip {
     display: inline-flex;
     align-items: center;
@@ -323,17 +318,6 @@
     border-bottom: 1px solid var(--bw-rule);
   }
   .bw-expand-grid__section { padding: 16px 20px; min-width: 0; }
-  .bw-btn--confirming {
-    background: var(--bw-warn-bg) !important;
-    color: var(--bw-warn) !important;
-    border-color: var(--bw-warn-border) !important;
-    animation: confirmPulse .25s ease-out;
-  }
-  @keyframes confirmPulse {
-    0%   { transform: scale(1); }
-    50%  { transform: scale(1.06); }
-    100% { transform: scale(1); }
-  }
   .bw-expand-grid__section + .bw-expand-grid__section { border-left: 1px solid var(--bw-rule); }
 </style>
 
@@ -420,7 +404,7 @@
     }
 
     if (lines.length === 0 && matchScore !== null) {
-      lines.push(`${pct}% name match — no additional signals`);
+      lines.push(`${pct}% name match: no additional signals`);
     }
 
     return lines;
@@ -439,14 +423,14 @@
       <div class="bw-expand-grid__section">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
           <p class="bw-eyebrow" style="margin:0;color:${titleColor};">${escHtml(cardTitle)}</p>
-          ${data.nppes_npi ? `<a href="https://npiregistry.cms.hhs.gov/provider-view/${escHtml(data.nppes_npi)}" target="_blank" rel="noopener noreferrer" class="bw-btn bw-btn--outline bw-btn--sm" style="font-size:11px;padding:3px 7px;">↗</a>` : ''}
+          ${data.nppes_npi ? `<a href="https://npiregistry.cms.hhs.gov/provider-view/${escHtml(data.nppes_npi)}" target="_blank" rel="noopener noreferrer" class="bw-btn bw-btn--outline bw-btn--sm" style="font-size:11px;padding:3px 7px;" aria-label="View on NPI Registry (opens in new tab)">↗</a>` : ''}
         </div>
         <p style="font-weight:600;font-size:13px;color:var(--bw-secondary);margin-bottom:8px;">${escHtml(data.nppes_name || '—')}</p>
         ${cityState ? `
           <p style="font-size:12px;color:var(--bw-ink-2);margin-bottom:4px;">${escHtml(cityState)}</p>` : ''}
         <p style="font-size:12px;margin-bottom:4px;">
           <span class="text-muted" style="font-weight:600;text-transform:uppercase;font-size:10px;letter-spacing:0.05em;">NPI</span>
-          &nbsp;<span class="mono" style="font-size:12px;color:var(--bw-ink-2);">${data.nppes_npi ? escHtml(data.nppes_npi) : 'N/A'}</span>
+          &nbsp;<span class="mono" style="font-size:12px;color:var(--bw-ink-2);font-weight:400;">${data.nppes_npi ? escHtml(data.nppes_npi) : 'N/A'}</span>
         </p>
         ${data.nppes_taxonomy_code ? `
           <p style="font-size:12px;margin-bottom:4px;">
@@ -633,6 +617,22 @@
       a.href += '&return_to=' + rt;
     });
   })();
+
+  // Guard "Show all" when record count is large
+  (function () {
+    const form = document.querySelector('form[action="/decisions"]');
+    const ppSel = document.getElementById('filter-per-page');
+    const pageTotal = {{ total }};
+    if (form && ppSel) {
+      form.addEventListener('submit', function (e) {
+        if (ppSel.value === '999999' && pageTotal > 300) {
+          if (!confirm('Load all ' + pageTotal + ' records? This may slow your browser.')) {
+            e.preventDefault();
+          }
+        }
+      });
+    }
+  }());
 </script>
 
 {% endblock %}
