@@ -169,7 +169,13 @@
           {% endif %}
         </td>
         <td class="text-muted" style="white-space:nowrap;font-weight:600;font-size:12px;">{{ r.hhl_state }}</td>
-        <td class="mono text-muted" style="font-size:12px;white-space:nowrap;font-weight:400;">{{ r.nppes_npi }}</td>
+        <td class="mono text-muted" style="font-size:12px;white-space:nowrap;font-weight:400;">
+          {% if r.approved_npis is defined and r.approved_npis | length > 1 %}
+            <span class="bw-badge bw-badge--approved" style="font-size:11px;">{{ r.approved_npis | length }} NPIs</span>
+          {% else %}
+            {{ r.nppes_npi }}
+          {% endif %}
+        </td>
         <td style="white-space:nowrap;">
           {% if r.decision == 'APPROVED' %}<span class="bw-badge bw-badge--approved">APPROVED</span>
           {% elif r.decision == 'REJECTED' %}<span class="bw-badge bw-badge--rejected">NO MATCH</span>
@@ -181,8 +187,14 @@
         </td>
         <td style="white-space:nowrap;">
           <div style="display:flex;gap:6px;justify-content:flex-end;align-items:center;">
-            {% if r.nppes_npi %}
-            <a href="/provider/{{ r.nppes_npi }}" class="bw-btn bw-btn--outline bw-btn--sm">Profile →</a>
+            {% if r.approved_npis is defined and r.approved_npis | length > 1 %}
+              {% if r.approved_npis[0] %}
+              <a href="/provider/{{ r.approved_npis[0] }}?hhl_id={{ r.hhl_id }}" class="bw-btn bw-btn--outline bw-btn--sm">Profile →</a>
+              {% endif %}
+            {% else %}
+              {% if r.nppes_npi %}
+              <a href="/provider/{{ r.nppes_npi }}" class="bw-btn bw-btn--outline bw-btn--sm">Profile →</a>
+              {% endif %}
             {% endif %}
             <a href="/{{ r.hhl_type }}s?q={{ r.name }}" class="bw-btn bw-btn--ghost bw-btn--sm" data-review-link>Review</a>
             <form action="/undecide/{{ r.hhl_type }}/{{ r.hhl_id }}" method="post" style="display:inline;border-left:1px solid var(--bw-rule);padding-left:8px;margin-left:2px;">

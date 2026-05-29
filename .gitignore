@@ -230,3 +230,6 @@ data/
 
 # Impeccable design tool (generated config, not needed in repo)
 .impeccable/
+
+# Claude Code internal artifacts (plans, superpowers scaffolding)
+docs/superpowers/

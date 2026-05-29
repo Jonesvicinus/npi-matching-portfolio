@@ -25,6 +25,7 @@ Output: data/medical_professional_matches_phase2.csv
 
 import csv
 import os
+import re
 import sqlite3
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -32,9 +33,12 @@ from concurrent.futures import ThreadPoolExecutor
 from rapidfuzz import fuzz, process as fuzz_process
 
 from nicknames import expand_first_name
-from scoring import professional_composite, confidence_from_score
+from scoring import (
+    professional_composite,
+    assess_candidate_strength, assess_selection_confidence,
+)
 
-BASE_DIR       = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR       = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR       = os.path.join(BASE_DIR, "data")
 DB_PATH        = os.path.join(DATA_DIR, "nppes_local.db")
 PROF_CSV       = os.path.join(DATA_DIR, "campaign_medicalprofessional_enriched.csv")
@@ -96,6 +100,8 @@ OUTPUT_FIELDS = [
     "hhl_role_id", "hhl_first_name", "hhl_last_name", "hhl_type", "hhl_email",
     "hhl_medical_center_id", "hhl_medical_center_name", "hhl_state", "hhl_city",
     "rank", "confidence", "match_score", "signals_matched",
+    "candidate_strength", "name_score", "city_score", "credential_score", "taxonomy_score", "phone_score",
+    "margin", "confidence_flags", "candidate_count",
     "nppes_npi", "nppes_first_name", "nppes_last_name", "nppes_credential",
     "nppes_taxonomy_code", "nppes_address", "nppes_city", "nppes_state",
     "nppes_zip", "nppes_phone", "action",
@@ -246,6 +252,16 @@ def get_state_individuals(state_abbr):
         return _state_cache[state_abbr]
 
 
+# Email domain → center_id mapping (built in main())
+_domain_center_map = {}
+
+
+def _domain_from_email(email):
+    if "@" in email:
+        return email.split("@", 1)[1].strip().lower()
+    return ""
+
+
 # ---------------------------------------------------------------------------
 # Scoring helpers (identical to phase 1)
 # ---------------------------------------------------------------------------
@@ -262,6 +278,22 @@ def credential_aligns(prof_type, credential):
         return False
     keywords = CREDENTIAL_KEYWORDS.get(prof_type, [])
     return any(kw in credential.upper() for kw in keywords)
+
+
+def normalize_phone(phone):
+    digits = "".join(ch for ch in str(phone or "") if ch.isdigit())
+    return digits[:10] if len(digits) >= 10 else ""
+
+
+def compute_phone_match(hhl_phone, nppes_phone):
+    """Returns (phone_match: bool, phone_score: float or None)."""
+    h = normalize_phone(hhl_phone)
+    n = normalize_phone(nppes_phone)
+    if not h or not n:
+        return False, None
+    if h == n:
+        return True, 1.0
+    return False, 0.0
 
 
 def score_individual(row, last_name, name_expansions):
@@ -287,10 +319,13 @@ def rank_candidates(all_rows, all_last_names, last_name, name_expansions, prefix
     scored = []
     for idx in candidate_indices:
         row = all_rows[idx]
-        # Only exclude if taxonomy is explicitly set AND doesn't match.
-        # NULL taxonomy means the provider hasn't filed one — don't discard them.
-        code = row.get("taxonomy_code") or ""
-        if prefixes and code and not any(code.startswith(p) for p in prefixes):
+        # First-name pre-filter: skip candidates whose best first-name similarity
+        # is below 0.40 — they are clearly different people, not nickname variants.
+        best_first = max(
+            fuzz.token_sort_ratio(exp.lower(), (row["first_name"] or "").lower()) / 100.0
+            for exp in name_expansions
+        )
+        if best_first < 0.40:
             continue
         score = score_individual(row, last_name, name_expansions)
         scored.append((score, row))
@@ -307,7 +342,7 @@ def process_professional(args):
     prof, center_lookup = args
 
     role_id    = prof["role_ptr_id"]
-    first_name = prof["first_name"].strip()
+    first_name = re.sub(r"^dr\.?\s+", "", prof["first_name"].strip(), flags=re.IGNORECASE).strip()
     last_name  = prof["last_name"].strip()
     prof_type  = prof.get("medical_professional_type", "").strip()
     email      = prof.get("email", "").strip()
@@ -336,9 +371,23 @@ def process_professional(args):
         "nppes_zip": "", "nppes_phone": "",
     }
 
+    hhl_phone = prof.get("phone", "").strip()
+
+    if first_name.lower() == "unknown" or last_name.lower() == "unknown":
+        return [{**base, "rank": "", "confidence": "NOT_MATCHABLE", "match_score": "",
+                 "signals_matched": "",
+                 "candidate_strength": "", "name_score": "", "city_score": "",
+                 "credential_score": "", "taxonomy_score": "", "phone_score": "",
+                 "margin": "", "confidence_flags": "generic_placeholder", "candidate_count": "",
+                 **empty, "action": "REVIEW"}]
+
     if prof_type not in MATCHABLE_TYPES or not first_name or not last_name or not state_abbr:
         return [{**base, "rank": "", "confidence": "SKIPPED", "match_score": "",
-                 "signals_matched": "", **empty, "action": "SKIP"}]
+                 "signals_matched": "",
+                 "candidate_strength": "", "name_score": "", "city_score": "",
+                 "credential_score": "", "taxonomy_score": "", "phone_score": "",
+                 "margin": "", "confidence_flags": "", "candidate_count": "",
+                 **empty, "action": "SKIP"}]
 
     name_expansions = expand_first_name(first_name)
     name_expansions = (name_expansions + [first_name] * 5)[:5]
@@ -350,6 +399,13 @@ def process_professional(args):
     confirmed_npi, anchor_type = get_confirmed_npi(center_id)
     anchor_city   = center_city
 
+    # Email domain → upgrade inferred anchor to approved when domain confirms center.
+    email_domain = _domain_from_email(email)
+    if (email_domain and anchor_type == "inferred" and
+            _domain_center_map.get(email_domain) == center_id):
+        anchor_type = "approved"
+
+    anchor_top = []
     if confirmed_npi:
         loc = get_center_location(confirmed_npi)
         if loc:
@@ -361,63 +417,156 @@ def process_professional(args):
                     loc_state, zip5, anchor_city
                 )
                 if loc_rows:
-                    top      = rank_candidates(loc_rows, loc_last_names, last_name, name_expansions, prefixes)
-                    anchored = bool(top)
+                    anchor_top = rank_candidates(loc_rows, loc_last_names, last_name, name_expansions, prefixes)
 
-    # --- Fallback: full state search (phase 1 logic) ---
-    if not anchored:
+    # Use anchor results when the best name_score is strong enough (>= 0.80).
+    # Below that threshold the anchor location may be wrong (person may have moved),
+    # so fall through to state-wide search to avoid missing better candidates.
+    anchor_best_name = anchor_top[0][0] if anchor_top else 0.0
+    if anchor_top and anchor_best_name >= 0.80:
+        top      = anchor_top
+        anchored = True
+    else:
+        # Fallback: full state search — also run when anchor results are weak.
         all_rows, all_last_names = get_state_individuals(state_abbr)
-        top = rank_candidates(all_rows, all_last_names, last_name, name_expansions, prefixes)
-        anchor_city = center_city
+        state_top = rank_candidates(all_rows, all_last_names, last_name, name_expansions, prefixes)
+
+        if anchor_top and anchor_best_name > 0:
+            # Merge: combine anchor and state candidates, deduplicate by NPI, keep TOP_N best.
+            seen_npis = set()
+            merged = []
+            for score, row in anchor_top + state_top:
+                npi = row["npi"]
+                if npi not in seen_npis:
+                    seen_npis.add(npi)
+                    merged.append((score, row))
+            merged.sort(key=lambda x: x[0], reverse=True)
+            top = merged[:TOP_N]
+            anchored = True  # partial anchor — signals still included
+        else:
+            top = state_top
+            anchor_city = center_city
 
     if not top:
         return [{**base, "rank": "", "confidence": "NO_MATCH", "match_score": "",
-                 "signals_matched": "", **empty, "action": "NEEDS_REVIEW"}]
+                 "signals_matched": "",
+                 "candidate_strength": "", "name_score": "", "city_score": "",
+                 "credential_score": "", "taxonomy_score": "", "phone_score": "",
+                 "margin": "", "confidence_flags": "", "candidate_count": "",
+                 **empty, "action": "NEEDS_REVIEW"}]
 
-    is_unique    = len(top) < 2 or (top[0][0] - top[1][0] >= 0.15)
-    city_missing = not anchored and not bool(anchor_city)
+    city_missing = not bool(anchor_city)
 
-    out_rows = []
-    for rank, (score, row) in enumerate(top, 1):
+    # --- Pass 1: base composites ---
+    intermediate = []
+    for name_score, row in top:
         city_match = bool(
             anchor_city and row.get("practice_city") and
             anchor_city.strip().upper() == row["practice_city"].strip().upper()
         )
-        cred_match = credential_aligns(prof_type, row.get("credential", ""))
-        tax_match  = taxonomy_matches(row, prefixes)
+        cred_match  = credential_aligns(prof_type, row.get("credential", ""))
+        tax_match   = taxonomy_matches(row, prefixes)
+        phone_match, phone_score = compute_phone_match(hhl_phone, row.get("practice_phone", ""))
 
         if anchored and anchor_type == "approved":
-            city_val = 1.0
+            city_val      = 1.0
+            city_conflict = False   # anchor_approved bypasses conflict
         else:
-            city_val = 1.0 if city_match else 0.0
+            city_val      = 1.0 if city_match else 0.0
+            city_conflict = (
+                not city_missing and
+                bool(row.get("practice_city")) and
+                not city_match
+            )
 
-        composite, signals = professional_composite(
-            score, city_val, cred_match, tax_match,
+        base_c, base_s, base_fs = professional_composite(
+            name_score, city_val, cred_match, tax_match,
             city_missing=city_missing,
-            is_unique=(rank == 1 and is_unique),
+            is_unique=False,
+            phone_match=phone_match,
         )
-        confidence = confidence_from_score(composite)
+        intermediate.append({
+            "name_score":        name_score,
+            "row":               row,
+            "city_val":          city_val,
+            "cred_match":        cred_match,
+            "tax_match":         tax_match,
+            "phone_match":       phone_match,
+            "phone_score":       phone_score,
+            "city_conflict":     city_conflict,
+            "base_composite":    base_c,
+            "base_signals":      base_s,
+            "base_field_scores": base_fs,
+        })
 
-        if anchored:
-            anchor_signal = "anchor_approved" if anchor_type == "approved" else "anchor_inferred"
-            signals = signals + [anchor_signal]
+    # Re-rank by base composite
+    intermediate.sort(key=lambda x: x["base_composite"], reverse=True)
+    candidate_count = len(intermediate)
+    margin = (
+        intermediate[0]["base_composite"] - intermediate[1]["base_composite"]
+        if candidate_count >= 2 else None
+    )
+    is_unique = margin is not None and margin >= 0.15
 
+    # Finalize: default final = base for all
+    for c in intermediate:
+        c["final_composite"]    = c["base_composite"]
+        c["final_signals"]      = c["base_signals"]
+        c["final_field_scores"] = c["base_field_scores"]
+
+    # Recompute rank-1 with uniqueness bonus if applicable
+    if is_unique:
+        c0 = intermediate[0]
+        fc, fs, ffs = professional_composite(
+            c0["name_score"], c0["city_val"], c0["cred_match"], c0["tax_match"],
+            city_missing=city_missing,
+            is_unique=True,
+            phone_match=c0["phone_match"],
+        )
+        c0["final_composite"]    = fc
+        c0["final_signals"]      = fs
+        c0["final_field_scores"] = ffs
+
+    # Append anchor signal to every candidate's final_signals AFTER composite finalized
+    if anchored:
+        anchor_signal = "anchor_approved" if anchor_type == "approved" else "anchor_inferred"
+        for c in intermediate:
+            c["final_signals"] = c["final_signals"] + [anchor_signal]
+
+    # --- Pass 2: build output rows ---
+    out_rows = []
+    for rank, c in enumerate(intermediate, 1):
+        ffs = c["final_field_scores"]
+        strength = assess_candidate_strength(c["final_composite"])
+        confidence, conf_flags = assess_selection_confidence(
+            c["final_composite"], c["city_conflict"], margin,
+            name_score=ffs["name"],
+        )
         out_rows.append({
             **base,
             "rank":                rank,
             "confidence":          confidence,
-            "match_score":         f"{composite:.3f}",
-            "signals_matched":     "|".join(signals),
-            "nppes_npi":           row["npi"],
-            "nppes_first_name":    row["first_name"]        or "",
-            "nppes_last_name":     row["last_name"]         or "",
-            "nppes_credential":    row["credential"]        or "",
-            "nppes_taxonomy_code": row["taxonomy_code"]     or "",
-            "nppes_address":       row["practice_address1"] or "",
-            "nppes_city":          row["practice_city"]     or "",
-            "nppes_state":         row["practice_state"]    or "",
-            "nppes_zip":           row["practice_zip"]      or "",
-            "nppes_phone":         row["practice_phone"]    or "",
+            "match_score":         f"{c['final_composite']:.3f}",
+            "signals_matched":     "|".join(c["final_signals"]),
+            "candidate_strength":  strength,
+            "name_score":          f"{ffs['name']:.3f}",
+            "city_score":          f"{ffs['city']:.3f}" if ffs["city"] is not None else "",
+            "credential_score":    f"{ffs['credential']:.3f}",
+            "taxonomy_score":      f"{ffs['taxonomy']:.3f}",
+            "phone_score":         f"{c['phone_score']:.3f}" if c["phone_score"] is not None else "",
+            "margin":              f"{margin:.3f}" if margin is not None else "",
+            "confidence_flags":    "|".join(conf_flags),
+            "candidate_count":     candidate_count,
+            "nppes_npi":           c["row"]["npi"],
+            "nppes_first_name":    c["row"]["first_name"]        or "",
+            "nppes_last_name":     c["row"]["last_name"]         or "",
+            "nppes_credential":    c["row"]["credential"]        or "",
+            "nppes_taxonomy_code": c["row"]["taxonomy_code"]     or "",
+            "nppes_address":       c["row"]["practice_address1"] or "",
+            "nppes_city":          c["row"]["practice_city"]     or "",
+            "nppes_state":         c["row"]["practice_state"]    or "",
+            "nppes_zip":           c["row"]["practice_zip"]      or "",
+            "nppes_phone":         c["row"]["practice_phone"]    or "",
             "action":              "REVIEW",
         })
     return out_rows
@@ -453,6 +602,22 @@ def main():
     print("Loading professionals...")
     with open(PROF_CSV, encoding="utf-8") as f:
         professionals = list(csv.DictReader(f))
+
+    # Build email domain → center_id map (majority-vote, min 2 professionals per domain).
+    from collections import Counter
+    domain_votes = {}
+    for p in professionals:
+        domain = _domain_from_email(p.get("email", "").strip())
+        if domain:
+            cid = p["medical_center_id"].strip()
+            domain_votes.setdefault(domain, Counter())[cid] += 1
+    global _domain_center_map
+    _domain_center_map = {
+        domain: counter.most_common(1)[0][0]
+        for domain, counter in domain_votes.items()
+        if counter.most_common(1)[0][1] >= 2
+    }
+    print(f"  {len(_domain_center_map)} email domains mapped to centers")
 
     total = len(professionals)
     print(f"Matching {total} professionals using {WORKERS} workers...\n")

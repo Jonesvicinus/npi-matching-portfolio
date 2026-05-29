@@ -6,10 +6,19 @@
   {% if conf == "HIGH" %}<span class="bw-badge bw-badge--high">HIGH</span>
   {% elif conf == "MEDIUM" %}<span class="bw-badge bw-badge--medium">MEDIUM</span>
   {% elif conf == "LOW" %}<span class="bw-badge bw-badge--low">LOW</span>
+  {% elif conf == "NOT_MATCHABLE" %}<span class="bw-badge bw-badge--gray">NOT MATCHABLE</span>
   {% else %}<span class="bw-badge bw-badge--gray">{{ conf }}</span>{% endif %}
 {% endmacro %}
 
+{% macro strength_badge(strength) %}
+  {% if strength == "STRONG" %}<span class="bw-badge bw-badge--strength-strong" title="Strong match: name, address, and phone all confirmed.">STRONG</span>
+  {% elif strength == "MODERATE" %}<span class="bw-badge bw-badge--strength-moderate" title="Moderate match: 2–3 signals confirmed. Review the address and phone before approving.">MODERATE</span>
+  {% elif strength == "WEAK" %}<span class="bw-badge bw-badge--strength-weak" title="Weak match: only 1 signal confirmed. Verify all details carefully before approving.">WEAK</span>
+  {% endif %}
+{% endmacro %}
+
 {% set _return_to = request.args.get('return_to', '') %}
+{% set sibling_param = '1' if filter_sibling else '0' %}
 {% if _return_to and _return_to.startswith('/decisions') %}
 <a href="{{ _return_to | e }}" class="bw-back-banner">← Back to Decisions</a>
 {% endif %}
@@ -39,18 +48,18 @@
 <form method="get" action="/centers" class="bw-filter-bar">
   <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px;">
     <input type="text" name="q" value="{{ search }}" placeholder="Search by name…"
-           class="bw-input" style="width:220px;" maxlength="200">
-    <select name="state" class="bw-select" style="width:140px;">
+           aria-label="Search by name" class="bw-input" style="flex:1;min-width:160px;" maxlength="200">
+    <select name="state" aria-label="Filter by state" class="bw-select" style="flex:1;min-width:110px;">
       <option value="all" {% if filter_state == 'all' %}selected{% endif %}>All states</option>
       {% for s in states %}<option value="{{ s }}" {% if filter_state == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
     </select>
-    <select name="sort" class="bw-select" style="width:170px;">
+    <select name="sort" aria-label="Sort order" class="bw-select" style="flex:1;min-width:140px;">
       <option value="conf"  {% if sort == 'conf'  %}selected{% endif %}>Sort: Confidence</option>
       <option value="score" {% if sort == 'score' %}selected{% endif %}>Sort: Match Score</option>
       <option value="name"  {% if sort == 'name'  %}selected{% endif %}>Sort: Name A–Z</option>
       <option value="state" {% if sort == 'state' %}selected{% endif %}>Sort: State</option>
     </select>
-    <select name="per_page" id="filter-per-page" class="bw-select" style="width:130px;">
+    <select name="per_page" id="filter-per-page" aria-label="Records per page" class="bw-select" style="flex:1;min-width:110px;">
       {% for n in [50, 100, 250] %}
         <option value="{{ n }}" {% if per_page == n %}selected{% endif %}>{{ n }} per page</option>
       {% endfor %}
@@ -58,30 +67,47 @@
       <option value="999999" {% if per_page == 999999 %}selected{% endif %}>Show all</option>
       {% endif %}
     </select>
-    <input type="hidden" name="conf" value="{{ filter_conf }}">
-    <input type="hidden" name="dec"  value="{{ filter_dec }}">
-    <button type="submit" class="bw-btn bw-btn--primary bw-btn--sm">Apply</button>
+    <input type="hidden" name="conf"    id="hf-conf" value="{{ filter_conf }}">
+    <input type="hidden" name="dec"     id="hf-dec" value="{{ filter_dec }}">
+    <input type="hidden" name="sibling" id="hf-sibling" value="{{ sibling_param }}">
+    <button type="submit" id="filter-apply-btn" onclick="guardShowAll(this, event)" class="bw-btn bw-btn--primary bw-btn--sm">Apply</button>
     <a href="/centers" class="text-muted" style="font-size:12px;">Reset</a>
   </div>
-  {% set conf_labels = {"all": "All", "HIGH": "High", "MEDIUM": "Medium", "LOW": "Low", "NO_MATCH": "No Candidates"} %}
+  {% set conf_labels = {"all": "All", "HIGH": "High", "MEDIUM": "Medium", "LOW": "Low", "NO_MATCH": "None"} %}
   {% set dec_labels  = {"all": "All", "PENDING": "Pending", "APPROVED": "Approved", "FLAGGED": "Flagged", "REJECTED": "No Match"} %}
-  <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;">
-    <div style="display:flex;align-items:center;gap:6px;">
-      <span class="bw-tip eyebrow" tabindex="0">Confidence
+  <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center;padding-right:24px;">
+    <div style="display:flex;align-items:center;gap:4px;">
+      <span class="bw-tip eyebrow" tabindex="0" aria-describedby="tip-conf-label">Confidence
         <span class="bw-tip__icon" aria-hidden="true">?</span>
-        <span role="tooltip" class="bw-tip__body">How closely the NPPES record matches the HHL record. HIGH = 4+ signals confirmed (name, address, phone, etc.). MEDIUM = 2–3 signals matched. LOW = 1 signal or weak name match only.</span>
+        <span role="tooltip" id="tip-conf-label" class="bw-tip__body">How closely the NPPES record matches the HHL record. HIGH = 4+ signals confirmed (name, address, phone, etc.). MEDIUM = 2–3 signals matched. LOW = 1 signal or weak name match only.</span>
       </span>
       {% for c in ["all","HIGH","MEDIUM","LOW","NO_MATCH"] %}
-        <a href="/centers?conf={{ c }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}"
-           class="bw-chip {% if filter_conf == c %}bw-chip--active{% endif %}">{{ conf_labels[c] }}</a>
+        <button type="submit"
+                class="bw-chip {% if filter_conf == c %}bw-chip--active{% endif %}"
+                {% if filter_conf == c %}aria-current="true"{% endif %}
+                onclick="document.getElementById('hf-conf').value='{{ c }}'">{{ conf_labels[c] }}</button>
       {% endfor %}
     </div>
-    <div style="display:flex;align-items:center;gap:6px;">
+    <div style="display:flex;align-items:center;gap:4px;padding-left:8px;">
       <span class="eyebrow">Decision</span>
       {% for d in ["all","PENDING","APPROVED","FLAGGED","REJECTED"] %}
-        <a href="/centers?conf={{ filter_conf }}&dec={{ d }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}"
-           class="bw-chip {% if filter_dec == d %}bw-chip--active{% endif %}">{{ dec_labels[d] }}</a>
+        <button type="submit"
+                class="bw-chip {% if filter_dec == d %}bw-chip--active{% endif %}"
+                {% if filter_dec == d %}aria-current="true"{% endif %}
+                onclick="document.getElementById('hf-dec').value='{{ d }}'">{{ dec_labels[d] }}</button>
       {% endfor %}
+    </div>
+    <div style="display:flex;align-items:center;gap:4px;padding-left:8px;">
+      <span class="eyebrow">Siblings</span>
+      <button type="submit"
+              class="bw-chip {% if not filter_sibling %}bw-chip--active{% endif %}"
+              {% if not filter_sibling %}aria-current="true"{% endif %}
+              onclick="document.getElementById('hf-sibling').value='0'">All</button>
+      <button type="submit"
+              class="bw-chip {% if filter_sibling %}bw-chip--active{% endif %}"
+              {% if filter_sibling %}aria-current="true"{% endif %}
+              title="Show only centers with multiple NPPES locations — each needs individual NPI review."
+              onclick="document.getElementById('hf-sibling').value='1'">Siblings Only</button>
     </div>
   </div>
 </form>
@@ -89,7 +115,7 @@
 {% if not items %}
   <div class="bw-card" style="padding:48px;text-align:center;">
     <p class="text-muted" style="margin-bottom:10px;">No records match the current filters.</p>
-    <a href="/centers" class="bw-btn bw-btn--ghost bw-btn--sm">Clear filters</a>
+    <a href="/centers" class="bw-btn bw-btn--outline bw-btn--sm">Clear filters</a>
   </div>
 {% endif %}
 
@@ -97,32 +123,37 @@
 {% set decided = item.decision %}
 {% set top = item.candidates[0] if item.candidates else none %}
 
-<div class="bw-record">
+<div class="bw-record" id="record-{{ item.hhl_id }}">
 
-  {% if decided %}
+  {% if item.is_decided %}
   <!-- ── DECIDED: compact summary ── -->
   <details>
     <summary style="list-style:none;cursor:pointer;" class="bw-record__header">
       <span class="bw-record__name">{{ item.meta.hhl_name }}</span>
       <span class="bw-record__meta">{{ item.meta.hhl_city }}{% if item.meta.hhl_city and item.meta.hhl_state %}, {% endif %}{{ item.meta.hhl_state }}</span>
       <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
-        {% if decided.decision == "APPROVED" %}
-          <span class="text-muted mono" style="font-size:12px;">
-            {% if top %}{{ top.nppes_name or '' }}{% if top.nppes_npi %} · {{ top.nppes_npi }}{% endif %}{% endif %}
-          </span>
+        {% if item.decision_status == "APPROVED" %}
+          {% if item.has_sibling %}
+            <span class="text-muted" style="font-size:12px;">{{ item.approved_npi_count }} NPI{{ 's' if item.approved_npi_count != 1 else '' }} approved</span>
+          {% else %}
+            {% set ac = item.approved_candidates[0] if item.approved_candidates else none %}
+            <span class="text-muted mono" style="font-size:12px;">
+              {% if ac %}{{ ac.nppes_name or '' }}{% if ac.nppes_npi %} · {{ ac.nppes_npi }}{% endif %}{% endif %}
+            </span>
+          {% endif %}
           <span class="bw-badge bw-badge--approved">APPROVED</span>
-        {% elif decided.decision == "REJECTED" %}
+        {% elif item.decision_status == "REJECTED" %}
           <span class="bw-badge bw-badge--rejected">NO MATCH</span>
-        {% elif decided.decision == "FLAGGED" %}
+        {% elif item.decision_status == "FLAGGED" %}
           <span class="bw-badge bw-badge--flagged">FLAGGED</span>
         {% endif %}
         <form action="/undecide/center/{{ item.hhl_id }}" method="post" style="display:inline;">
-          <input type="hidden" name="back" value="/centers?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&page={{ page }}">
+          <input type="hidden" name="back" value="/centers?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&sibling={{ sibling_param }}&page={{ page }}#record-{{ item.hhl_id }}">
           <button type="button"
                   onclick="confirmUndo(this, event)"
                   class="bw-btn bw-btn--danger bw-btn--sm">Undo</button>
         </form>
-        <span class="text-muted" style="font-size:11px;" aria-hidden="true">▾</span>
+        <span class="text-muted" style="font-size:12px;" aria-hidden="true">▾</span>
       </div>
     </summary>
 
@@ -131,15 +162,17 @@
         <div style="padding:12px 24px;font-size:13px;" class="text-muted">No NPPES candidates found.</div>
       {% else %}
         {% for cand in item.candidates %}
-        <div style="padding:14px 24px;{% if not loop.first %}border-top:1px solid var(--bw-rule-subtle);{% endif %}{% if loop.first %}background:var(--bw-surface-subtle);{% endif %}display:flex;align-items:flex-start;gap:16px;">
-          <div style="text-align:center;width:44px;flex-shrink:0;">
+        <div style="padding:14px 24px;{% if not loop.first %}border-top:1px solid var(--bw-rule-subtle);{% endif %}{% if loop.first %}background:var(--bw-surface-subtle);{% endif %}display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;">
+          <div style="text-align:center;flex-shrink:0;">
             <div style="font-size:13px;font-weight:700;color:var(--bw-muted);">#{{ cand.rank }}</div>
-            <div style="font-size:11px;color:var(--bw-muted);margin:1px 0;">{{ cand.match_score }}</div>
+            <div class="eyebrow" style="margin-top:4px;margin-bottom:1px;">Score</div>
+            <div style="font-size:12px;color:var(--bw-muted);margin:1px 0;" title="Match score (0–1). 0.7+ = strong, 0.4–0.7 = moderate, below 0.4 = weak.">{{ cand.match_score }}</div>
             {{ conf_badge(cand.confidence) }}
+            {% if cand.candidate_strength %}<div style="margin-top:3px;">{{ strength_badge(cand.candidate_strength) }}</div>{% endif %}
           </div>
           <div style="flex:1;min-width:0;">
             <div style="font-weight:600;font-size:13px;">{{ cand.nppes_name }}</div>
-            <div class="text-muted mono" style="font-size:12px;margin-top:2px;">{{ cand.nppes_npi }}{% if cand.match_source == "other_name" %} <span style="font-family:var(--bw-font-body);color:var(--bw-purple);">· via alternate name</span>{% endif %}</div>
+            <div class="text-muted mono" style="font-size:12px;margin-top:2px;">{{ cand.nppes_npi }}{% if cand.match_source == "other_name" %} <span style="font-family:var(--bw-font-body);color:var(--bw-purple);">· via alternate name</span>{% elif cand.match_source == "keyword_match" %} <span style="font-family:var(--bw-font-body);color:var(--bw-purple);">· via keyword match</span>{% endif %}{% if 'perfect_name' in cand.confidence_flags %} <span style="font-family:var(--bw-font-body);color:var(--bw-success);">· exact name</span>{% endif %}</div>
             {% if cand.nppes_address %}<div class="text-muted" style="font-size:12px;margin-top:2px;">{{ cand.nppes_address }}, {{ cand.nppes_city }}, {{ cand.nppes_state }} {{ cand.nppes_zip }}</div>{% endif %}
             {% if cand.signals_matched %}
             <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;">
@@ -147,8 +180,8 @@
             </div>
             {% endif %}
           </div>
-          <div style="flex-shrink:0;display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
-            {% if decided.nppes_npi == cand.nppes_npi %}
+          <div style="flex-shrink:0;display:flex;flex-direction:column;gap:6px;align-items:flex-end;margin-left:auto;">
+            {% if cand.nppes_npi in item.approved_npis %}
               <span style="font-size:12px;font-weight:600;color:var(--bw-success);">✓ Selected</span>
             {% endif %}
             <a href="/provider/{{ cand.nppes_npi }}" target="_blank" class="bw-btn bw-btn--ghost bw-btn--sm">Profile</a>
@@ -168,21 +201,78 @@
     {% if item.meta.hhl_url %}
       <a href="{{ item.meta.hhl_url }}" target="_blank" class="text-brand" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;max-width:280px;white-space:nowrap;">{{ item.meta.hhl_url }}</a>
     {% endif %}
-    <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+    <div style="margin-left:auto;display:flex;align-items:center;gap:12px;">
+      <form action="/toggle-multi-npi/{{ item.hhl_id }}" method="post" style="display:inline-flex;align-items:center;">
+        <input type="hidden" name="back" value="/centers?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&sibling={{ sibling_param }}&page={{ page }}#record-{{ item.hhl_id }}">
+        {% if item.is_auto_sibling and not item.is_sibling_overridden %}
+          <input type="hidden" name="action" value="override_disable">
+        {% elif item.is_sibling_overridden %}
+          <input type="hidden" name="action" value="override_enable">
+        {% elif item.is_manual_multi and not item.manual_collapsed %}
+          <input type="hidden" name="action" value="disable">
+        {% else %}
+          <input type="hidden" name="action" value="enable">
+        {% endif %}
+        <label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--bw-muted);font-weight:600;cursor:pointer;"
+               {% if item.is_auto_sibling and not item.is_sibling_overridden %}title="Multiple locations detected automatically. Uncheck if this is actually a single location."{% endif %}>
+          <input type="checkbox"
+                 {{ 'checked' if ((item.is_auto_sibling and not item.is_sibling_overridden) or (item.is_manual_multi and not item.manual_collapsed)) }}
+                 onchange="this.closest('form').submit()"
+                 style="width:14px;height:14px;accent-color:var(--bw-brand);cursor:pointer;">
+          Multiple NPIs
+        </label>
+        <span class="bw-tip" tabindex="0" aria-describedby="tip-multi-{{ item.hhl_id }}" style="display:inline-flex;align-items:center;margin-left:2px;"><span class="bw-tip__icon" aria-hidden="true">?</span><span role="tooltip" id="tip-multi-{{ item.hhl_id }}" class="bw-tip__body">Check if this center has multiple locations, each needing its own NPI. Each location must be approved individually before clicking Mark Complete.</span></span>
+      </form>
       {{ conf_badge(item.top_conf) }}
       <span class="bw-badge bw-badge--pending">PENDING</span>
+      {% if item.has_sibling and item.approved_npi_count > 0 %}
+        <span class="bw-badge bw-badge--approved" style="font-size:11px;">{{ item.approved_npi_count }} approved</span>
+      {% endif %}
     </div>
   </div>
 
-  {% if not item.candidates %}
+  {% set has_sibling = item.has_sibling %}
+  {% set sibling_count = item.sibling_count %}
+  {% if item.is_auto_sibling %}
+  <div role="alert" style="margin:0 0 0 0;padding:10px 20px;background:var(--bw-warn-bg);border-bottom:1px solid var(--bw-warn-border);display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--bw-warn);">
+    <span aria-hidden="true" style="font-weight:700;flex-shrink:0;">!</span>
+    {% if 'perfect_name' in (item.candidates[0].confidence_flags or '') %}
+    <span>Name confirmed — this center has <strong>{{ sibling_count }} location{{ 's' if sibling_count != 1 else '' }} in NPPES</strong>. Approve each valid location's NPI, then click Mark Complete.</span>
+    {% else %}
+    <span>This center has <strong>{{ sibling_count }} possible NPPES location{{ 's' if sibling_count != 1 else '' }}</strong> — more than one may be valid. Approve each that applies, then click Mark Complete.</span>
+    {% endif %}
+  </div>
+  {% elif item.is_manual_multi and not item.manual_collapsed %}
+  <div role="alert" style="margin:0 0 0 0;padding:10px 20px;background:var(--bw-warn-bg);border-bottom:1px solid var(--bw-warn-border);display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--bw-warn);">
+    <span aria-hidden="true" style="font-weight:700;flex-shrink:0;">!</span>
+    <span><strong>Multiple NPIs</strong> — approve each valid location's NPI below, then click Mark Complete.</span>
+  </div>
+  {% endif %}
+
+  {% if item.top_conf == "NOT_MATCHABLE" %}
+    <div style="padding:14px 24px;display:flex;align-items:flex-start;gap:12px;">
+      <div>
+        <p style="font-size:13px;color:var(--bw-ink-2);margin-bottom:4px;font-weight:600;">Placeholder entry — cannot be matched</p>
+        <p style="font-size:12px;" class="text-muted">HHL recorded a generic role description rather than a specific practice name. No NPI lookup is possible. Request more information from the patient to identify the actual provider.</p>
+      </div>
+    </div>
+    <form action="/decide/center/{{ item.hhl_id }}" method="post" style="padding:12px 24px;border-top:1px solid var(--bw-rule);background:var(--bw-surface-subtle);display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <input type="hidden" name="back" value="/centers?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&sibling={{ sibling_param }}&page={{ page }}#record-{{ item.hhl_id }}">
+      <input type="hidden" name="nppes_npi" value="">
+      <input type="text" name="notes" placeholder="Reason for flag or rejection (optional)" aria-label="Notes" class="bw-input" style="width:180px;padding:7px 10px;font-size:12px;" maxlength="500">
+      <button type="button" data-decision="FLAGGED"  class="bw-btn bw-btn--warn bw-btn--sm"   onclick="confirmDecision(this, event)">Flag</button>
+      <button type="button" data-decision="REJECTED" class="bw-btn bw-btn--danger bw-btn--sm" onclick="confirmDecision(this, event)">No Match</button>
+    </form>
+
+  {% elif not item.candidates %}
     <div style="padding:14px 24px;">
       <p style="font-size:13px;color:var(--bw-ink-2);margin-bottom:4px;">No NPPES candidates found.</p>
       <p style="font-size:12px;" class="text-muted">Use <strong>No Match</strong> if you're confident this provider isn't in NPPES. Use <strong>Flag</strong> if you're not sure or want a second look.</p>
     </div>
     <form action="/decide/center/{{ item.hhl_id }}" method="post" style="padding:12px 24px;border-top:1px solid var(--bw-rule);background:var(--bw-surface-subtle);display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-      <input type="hidden" name="back" value="/centers?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&page={{ page }}">
+      <input type="hidden" name="back" value="/centers?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&sibling={{ sibling_param }}&page={{ page }}#record-{{ item.hhl_id }}">
       <input type="hidden" name="nppes_npi" value="">
-      <input type="text" name="notes" placeholder="Notes (optional)" aria-label="Notes" class="bw-input" style="width:180px;padding:7px 10px;font-size:12px;" maxlength="500">
+      <input type="text" name="notes" placeholder="Reason for flag or rejection (optional)" aria-label="Notes" class="bw-input" style="width:180px;padding:7px 10px;font-size:12px;" maxlength="500">
       <button type="button" data-decision="FLAGGED"  class="bw-btn bw-btn--warn bw-btn--sm"   onclick="confirmDecision(this, event)">Flag</button>
       <button type="button" data-decision="REJECTED" class="bw-btn bw-btn--danger bw-btn--sm" onclick="confirmDecision(this, event)">No Match</button>
     </form>
@@ -192,24 +282,25 @@
 
     <!-- Best candidate -->
     <div class="bw-candidate {% if best.confidence == 'HIGH' %}bw-candidate--best-high{% elif best.confidence == 'MEDIUM' %}bw-candidate--best-medium{% else %}bw-candidate--best-other{% endif %}">
-      <div style="display:flex;align-items:flex-start;gap:16px;">
-        <div style="text-align:center;width:44px;flex-shrink:0;padding-top:2px;">
+      <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;">
+        <div style="text-align:center;flex-shrink:0;padding-top:2px;">
           <div class="eyebrow" style="margin-bottom:3px;">Best</div>
-          <div style="font-size:11px;color:var(--bw-muted);margin-bottom:3px;">{{ best.match_score }}</div>
+          <div style="font-size:12px;color:var(--bw-muted);margin-bottom:3px;" title="Match score (0–1). 0.7+ = strong, 0.4–0.7 = moderate, below 0.4 = weak.">{{ best.match_score }}</div>
           {{ conf_badge(best.confidence) }}
+          {% if best.candidate_strength %}<div style="margin-top:3px;">{{ strength_badge(best.candidate_strength) }}</div>{% endif %}
         </div>
 
         <div style="flex:1;min-width:0;">
           <div style="font-weight:600;font-size:14px;color:var(--bw-ink-2);">{{ best.nppes_name }}</div>
-          <div class="text-muted mono" style="font-size:12px;margin-top:3px;">{{ best.nppes_npi }}{% if best.match_source == "other_name" %} <span style="font-family:var(--bw-font-body);color:var(--bw-purple);">· via alternate name</span>{% endif %}</div>
+          <div class="text-muted mono" style="font-size:12px;margin-top:3px;">{{ best.nppes_npi }}{% if best.match_source == "other_name" %} <span style="font-family:var(--bw-font-body);color:var(--bw-purple);">· via alternate name</span>{% elif best.match_source == "keyword_match" %} <span style="font-family:var(--bw-font-body);color:var(--bw-purple);">· via keyword match</span>{% endif %}{% if 'perfect_name' in best.confidence_flags %} <span style="font-family:var(--bw-font-body);color:var(--bw-success);">· exact name</span>{% endif %}</div>
           {% if best.nppes_address %}<div class="text-muted" style="font-size:12px;margin-top:2px;">{{ best.nppes_address }}, {{ best.nppes_city }}, {{ best.nppes_state }} {{ best.nppes_zip }}</div>{% endif %}
           {% if best.nppes_phone %}<div class="text-muted" style="font-size:12px;">{{ best.nppes_phone }}</div>{% endif %}
           {% if best.signals_matched %}
           <div style="margin-top:8px;">
-            <span class="bw-tip" tabindex="0" style="display:inline-flex;align-items:center;margin-bottom:5px;">
-              <span style="font-size:11px;font-weight:700;color:var(--bw-muted);text-transform:uppercase;letter-spacing:0.06em;">Why this matched</span>
+            <span class="bw-tip" tabindex="0" aria-describedby="tip-why-{{ item.hhl_id }}" style="display:inline-flex;align-items:center;margin-bottom:5px;">
+              <span style="font-size:12px;font-weight:700;color:var(--bw-muted);text-transform:uppercase;letter-spacing:0.06em;">Why this matched</span>
               <span class="bw-tip__icon" aria-hidden="true">?</span>
-              <span role="tooltip" class="bw-tip__body">Fields that matched between the HHL record and this NPPES provider. More matching signals = higher confidence the match is correct.</span>
+              <span role="tooltip" id="tip-why-{{ item.hhl_id }}" class="bw-tip__body">Fields that matched between the HHL record and this NPPES provider. More matching signals = higher confidence the match is correct.</span>
             </span>
             <div style="display:flex;gap:4px;flex-wrap:wrap;">
               {% for sig in best.signals_matched.split('|') %}<span class="bw-signal">✓ {{ sig }}</span>{% endfor %}
@@ -218,8 +309,8 @@
           {% endif %}
         </div>
 
-        <div style="flex-shrink:0;display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
-          <a href="/provider/{{ best.nppes_npi }}" target="_blank" class="bw-btn bw-btn--ghost bw-btn--sm">Profile</a>
+        <div style="flex-shrink:0;display:flex;flex-direction:column;gap:6px;align-items:flex-end;margin-left:auto;">
+          <a href="/provider/{{ best.nppes_npi }}?hhl_id={{ item.hhl_id }}" target="_blank" class="bw-btn bw-btn--ghost bw-btn--sm">Profile</a>
         </div>
       </div>
 
@@ -227,7 +318,7 @@
       {% if best.nppes_npi in approved_by_npi %}
         {% for dup in approved_by_npi[best.nppes_npi] %}
           {% if dup.hhl_id != item.hhl_id %}
-          <div role="alert" style="margin:8px 24px 0;padding:10px 14px;border-radius:6px;border:1px solid var(--bw-warn-border);background:var(--bw-warn-bg);display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--bw-warn);">
+          <div role="alert" style="margin:8px 24px 0;padding:10px 14px;border-radius:var(--bw-r-md);border:1px solid var(--bw-warn-border);background:var(--bw-warn-bg);display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--bw-warn);">
             <span aria-hidden="true" style="font-weight:700;flex-shrink:0;">!</span>
             <span>NPI already approved for <strong>{{ dup.name }}</strong>. One NPI for multiple records is allowed if the same provider serves both. Review carefully before confirming.</span>
           </div>
@@ -235,57 +326,265 @@
         {% endfor %}
       {% endif %}
 
-      <!-- Action bar -->
-      <form action="/decide/center/{{ item.hhl_id }}" method="post" class="bw-action-bar">
-        <input type="hidden" name="back" value="/centers?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&page={{ page }}">
-        <input type="hidden" name="nppes_npi" value="{{ best.nppes_npi }}">
-        <input type="text" name="notes" placeholder="Notes (optional)" aria-label="Notes" class="bw-input" style="width:180px;padding:7px 10px;font-size:12px;" maxlength="500">
-        <button type="button" data-decision="APPROVED" class="bw-btn bw-btn--success" onclick="confirmDecision(this, event)">✓ Confirm Match</button>
-        <button type="button" data-decision="FLAGGED" data-npi="" class="bw-btn bw-btn--warn bw-btn--sm" onclick="confirmDecision(this, event)">Flag</button>
-        <span class="bw-tip" tabindex="0" style="display:inline-flex;align-items:center;margin-left:-2px;">
-          <span class="bw-tip__icon" aria-hidden="true">?</span>
-          <span role="tooltip" class="bw-tip__body">Flag when you're unsure or want a second opinion. Use No Match when you're confident this provider isn't in NPPES.</span>
-        </span>
-        <button type="button" data-decision="REJECTED" data-npi="" class="bw-btn bw-btn--danger bw-btn--sm" onclick="confirmDecision(this, event)">No Match</button>
-      </form>
+      <!-- Action bar: notes + all decisions always visible -->
+      <div class="bw-action-bar" style="flex-wrap:wrap;">
+        {% if not item.has_sibling %}
+        <form action="/decide/center/{{ item.hhl_id }}" method="post" style="display:contents;">
+          <input type="hidden" name="back" value="/centers?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&sibling={{ sibling_param }}&page={{ page }}#record-{{ item.hhl_id }}">
+          <input type="hidden" name="nppes_npi" value="{{ best.nppes_npi }}">
+          <input type="text" name="notes" placeholder="Add a note (optional)…" aria-label="Notes" class="bw-input" style="flex:1;min-width:160px;padding:7px 10px;font-size:12px;" maxlength="500">
+          <button type="button" data-decision="APPROVED" class="bw-btn bw-btn--success" onclick="confirmDecision(this, event)">✓ Confirm Match</button>
+          <button type="button" data-decision="FLAGGED" data-npi="" class="bw-btn bw-btn--warn bw-btn--sm" onclick="confirmDecision(this, event)">Flag</button>
+          <span class="bw-tip" tabindex="0" aria-describedby="tip-flag-{{ item.hhl_id }}" style="display:inline-flex;align-items:center;margin-left:-2px;">
+            <span class="bw-tip__icon" aria-hidden="true">?</span>
+            <span role="tooltip" id="tip-flag-{{ item.hhl_id }}" class="bw-tip__body">Flag when you're unsure or want a second opinion. Use No Match when you're confident this provider isn't in NPPES.</span>
+          </span>
+          <button type="button" data-decision="REJECTED" data-npi="" class="bw-btn bw-btn--danger bw-btn--sm" onclick="confirmDecision(this, event)">No Match</button>
+        </form>
+        {% else %}
+        <form action="/complete-center/{{ item.hhl_id }}" method="post" style="display:contents;">
+          <input type="hidden" name="back" value="/centers?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&sibling={{ sibling_param }}&page={{ page }}#record-{{ item.hhl_id }}">
+          <button type="button"
+            data-decision="COMPLETE"
+            onclick="confirmDecision(this, event)"
+            class="bw-btn bw-btn--success"
+            {% if item.approved_npi_count == 0 %}disabled{% endif %}>
+            ✓ Mark Complete{% if item.approved_npi_count > 0 %} ({{ item.approved_npi_count }}){% endif %}
+          </button>
+        </form>
+        {% if item.approved_npi_count == 0 %}<span class="text-muted" style="font-size:11px;align-self:center;">Approve a location above first.</span>{% endif %}
+        {% if item.has_sibling and item.approved_npi_count > 0 %}
+          <span class="text-muted" style="font-size:12px;">Remove approved NPIs to flag or reject.</span>
+        {% else %}
+        <form action="/decide/center/{{ item.hhl_id }}" method="post" style="display:contents;">
+          <input type="hidden" name="back" value="/centers?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&sibling={{ sibling_param }}&page={{ page }}#record-{{ item.hhl_id }}">
+          <input type="hidden" name="nppes_npi" value="">
+          <input type="text" name="notes" placeholder="Add a note (optional)…" aria-label="Notes" class="bw-input" style="flex:1;min-width:160px;padding:7px 10px;font-size:12px;" maxlength="500">
+          <button type="button" data-decision="FLAGGED" data-npi="" class="bw-btn bw-btn--warn bw-btn--sm" onclick="confirmDecision(this, event)">Flag</button>
+          <span class="bw-tip" tabindex="0" aria-describedby="tip-flag-{{ item.hhl_id }}" style="display:inline-flex;align-items:center;margin-left:-2px;">
+            <span class="bw-tip__icon" aria-hidden="true">?</span>
+            <span role="tooltip" id="tip-flag-{{ item.hhl_id }}" class="bw-tip__body">Flag when you're unsure or want a second opinion. Use No Match when you're confident this provider isn't in NPPES.</span>
+          </span>
+          <button type="button" data-decision="REJECTED" data-npi="" class="bw-btn bw-btn--danger bw-btn--sm" onclick="confirmDecision(this, event)">No Match</button>
+        </form>
+        {% endif %}
+        {% endif %}
+      </div>
     </div>
 
-    <!-- More candidates (collapsed) -->
-    {% if item.candidates|length > 1 %}
-    <details style="border-top:1px solid var(--bw-rule);">
-      <summary class="text-muted" style="padding:10px 20px;font-size:12px;cursor:pointer;list-style:none;font-weight:600;">
-        <span aria-hidden="true">▾</span> {{ item.candidates|length - 1 }} more candidate{{ 's' if item.candidates|length > 2 }}
-      </summary>
-      {% for cand in item.candidates[1:] %}
-      <div style="padding:14px 24px;border-top:1px solid var(--bw-rule-subtle);display:flex;align-items:flex-start;gap:16px;">
-        <div style="text-align:center;width:44px;flex-shrink:0;">
+    {% if item.is_auto_sibling %}
+    <!-- Auto-sibling: show only sibling_location-flagged candidates -->
+    <div style="border-top:1px solid var(--bw-rule);">
+      {% set _sib_n = namespace(count=0) %}
+      {% for cand in item.candidates %}{% if 'sibling_location' in (cand.confidence_flags or '') %}
+      {% set _sib_n.count = _sib_n.count + 1 %}
+      {% if _sib_n.count == 6 %}
+      <div id="more-{{ item.hhl_id }}" style="display:none;">
+      {% endif %}
+      <div style="padding:14px 24px;{% if _sib_n.count > 1 %}border-top:1px solid var(--bw-rule-subtle);{% endif %}display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;">
+        <div style="text-align:center;flex-shrink:0;">
           <div style="font-size:13px;font-weight:700;color:var(--bw-muted);">#{{ cand.rank }}</div>
-          <div style="font-size:11px;color:var(--bw-muted);margin:1px 0;">{{ cand.match_score }}</div>
+          <div class="eyebrow" style="margin-top:4px;margin-bottom:1px;">Score</div>
+          <div style="font-size:12px;color:var(--bw-muted);margin:1px 0;" title="Match score (0–1). 0.7+ = strong, 0.4–0.7 = moderate, below 0.4 = weak.">{{ cand.match_score }}</div>
           {{ conf_badge(cand.confidence) }}
+          {% if cand.candidate_strength %}<div style="margin-top:3px;">{{ strength_badge(cand.candidate_strength) }}</div>{% endif %}
         </div>
         <div style="flex:1;min-width:0;">
           <div style="font-weight:600;font-size:13px;">{{ cand.nppes_name }}</div>
-          <div class="text-muted mono" style="font-size:12px;margin-top:2px;">{{ cand.nppes_npi }}</div>
+          <div class="text-muted mono" style="font-size:12px;margin-top:2px;">{{ cand.nppes_npi }}{% if cand.match_source == "other_name" %} <span style="font-family:var(--bw-font-body);color:var(--bw-purple);">· via alternate name</span>{% elif cand.match_source == "keyword_match" %} <span style="font-family:var(--bw-font-body);color:var(--bw-purple);">· via keyword match</span>{% endif %}{% if 'perfect_name' in (cand.confidence_flags or '') %} <span style="font-family:var(--bw-font-body);color:var(--bw-success);">· exact name</span>{% endif %}</div>
           {% if cand.nppes_address %}<div class="text-muted" style="font-size:12px;margin-top:2px;">{{ cand.nppes_address }}, {{ cand.nppes_city }}, {{ cand.nppes_state }} {{ cand.nppes_zip }}</div>{% endif %}
+          {% if cand.nppes_phone %}<div class="text-muted" style="font-size:12px;">{{ cand.nppes_phone }}</div>{% endif %}
           {% if cand.signals_matched %}
           <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;">
             {% for sig in cand.signals_matched.split('|') %}<span class="bw-signal">✓ {{ sig }}</span>{% endfor %}
           </div>
           {% endif %}
         </div>
-        <div style="flex-shrink:0;display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
+        <div style="flex-shrink:0;display:flex;flex-direction:column;gap:6px;align-items:flex-end;margin-left:auto;">
           {% if cand.nppes_npi in approved_by_npi %}
             {% for dup in approved_by_npi[cand.nppes_npi] %}
               {% if dup.hhl_id != item.hhl_id %}
-                <span class="bw-tip bw-badge bw-badge--medium" tabindex="0" style="font-size:11px;cursor:help;">
+                <span class="bw-tip bw-badge bw-badge--medium" tabindex="0" aria-describedby="tip-also-{{ item.hhl_id }}-{{ cand.nppes_npi }}-{{ loop.index }}" style="font-size:11px;cursor:help;">
                   Also approved: {{ dup.name }}
-                  <span role="tooltip" class="bw-tip__body bw-tip__body--right">This NPI is already approved for {{ dup.name }}. One NPI for multiple records is OK if the same provider serves both. Review carefully to confirm this is intentional.</span>
+                  <span role="tooltip" id="tip-also-{{ item.hhl_id }}-{{ cand.nppes_npi }}-{{ loop.index }}" class="bw-tip__body bw-tip__body--right">This NPI is already approved for {{ dup.name }}. One NPI for multiple records is OK if the same provider serves both.</span>
+                </span>
+              {% endif %}
+            {% endfor %}
+          {% endif %}
+          <a href="/provider/{{ cand.nppes_npi }}?hhl_id={{ item.hhl_id }}" target="_blank" class="bw-btn bw-btn--ghost bw-btn--sm">Profile</a>
+          {% if (item.hhl_id, 'center', cand.nppes_npi) in decisions %}
+            <span style="font-size:12px;font-weight:600;color:var(--bw-success);">✓ Approved</span>
+            <form action="/undecide-npi/center/{{ item.hhl_id }}" method="post" style="margin:0;">
+              <input type="hidden" name="back" value="/centers?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&sibling={{ sibling_param }}&page={{ page }}#record-{{ item.hhl_id }}">
+              <input type="hidden" name="nppes_npi" value="{{ cand.nppes_npi }}">
+              <button type="submit" class="bw-btn bw-btn--ghost bw-btn--sm" style="font-size:11px;">Remove</button>
+            </form>
+          {% else %}
+            <form action="/decide/center/{{ item.hhl_id }}" method="post" style="margin:0;">
+              <input type="hidden" name="back" value="/centers?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&sibling={{ sibling_param }}&page={{ page }}#record-{{ item.hhl_id }}">
+              <input type="hidden" name="nppes_npi" value="{{ cand.nppes_npi }}">
+              <button type="button" data-decision="APPROVED" class="bw-btn bw-btn--sm" style="font-size:12px;" onclick="confirmDecision(this, event)">Approve</button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}{% endfor %}
+      {% if _sib_n.count >= 6 %}</div>{% endif %}
+    </div>
+    {% if _sib_n.count > 5 %}
+    <div style="padding:10px 24px;border-top:1px solid var(--bw-rule);">
+      {% set _more_label = 'Show all ' ~ sibling_count ~ ' sibling' ~ ('s' if sibling_count != 1 else '') ~ ' ▾' %}
+      <button type="button"
+        id="show-more-btn-{{ item.hhl_id }}"
+        data-more-label="{{ _more_label }}"
+        onclick="
+          var d=document.getElementById('more-{{ item.hhl_id }}');
+          var btn=this;
+          var open=d.style.display!=='none';
+          d.style.display=open?'none':'block';
+          btn.textContent=open?btn.dataset.moreLabel:'Show fewer ▴';
+        "
+        class="bw-btn bw-btn--ghost bw-btn--sm">
+        {{ _more_label }}
+      </button>
+    </div>
+    {% endif %}
+
+    {% elif item.is_manual_multi and not item.manual_collapsed %}
+    <!-- Manual multi-NPI: show ALL candidates with Approve/Remove -->
+    <div style="border-top:1px solid var(--bw-rule);">
+      {% set _man_n = namespace(count=0) %}
+      {% for cand in item.candidates %}
+      {% set _man_n.count = _man_n.count + 1 %}
+      {% if _man_n.count == 6 %}
+      <div id="more-{{ item.hhl_id }}" style="display:none;">
+      {% endif %}
+      <div style="padding:14px 24px;{% if _man_n.count > 1 %}border-top:1px solid var(--bw-rule-subtle);{% endif %}display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;">
+        <div style="text-align:center;flex-shrink:0;">
+          <div style="font-size:13px;font-weight:700;color:var(--bw-muted);">#{{ cand.rank }}</div>
+          <div class="eyebrow" style="margin-top:4px;margin-bottom:1px;">Score</div>
+          <div style="font-size:12px;color:var(--bw-muted);margin:1px 0;" title="Match score (0–1). 0.7+ = strong, 0.4–0.7 = moderate, below 0.4 = weak.">{{ cand.match_score }}</div>
+          {{ conf_badge(cand.confidence) }}
+          {% if cand.candidate_strength %}<div style="margin-top:3px;">{{ strength_badge(cand.candidate_strength) }}</div>{% endif %}
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;font-size:13px;">{{ cand.nppes_name }}</div>
+          <div class="text-muted mono" style="font-size:12px;margin-top:2px;">{{ cand.nppes_npi }}{% if cand.match_source == "other_name" %} <span style="font-family:var(--bw-font-body);color:var(--bw-purple);">· via alternate name</span>{% elif cand.match_source == "keyword_match" %} <span style="font-family:var(--bw-font-body);color:var(--bw-purple);">· via keyword match</span>{% endif %}{% if 'perfect_name' in (cand.confidence_flags or '') %} <span style="font-family:var(--bw-font-body);color:var(--bw-success);">· exact name</span>{% endif %}</div>
+          {% if cand.nppes_address %}<div class="text-muted" style="font-size:12px;margin-top:2px;">{{ cand.nppes_address }}, {{ cand.nppes_city }}, {{ cand.nppes_state }} {{ cand.nppes_zip }}</div>{% endif %}
+          {% if cand.nppes_phone %}<div class="text-muted" style="font-size:12px;">{{ cand.nppes_phone }}</div>{% endif %}
+          {% if cand.signals_matched %}
+          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;">
+            {% for sig in cand.signals_matched.split('|') %}<span class="bw-signal">✓ {{ sig }}</span>{% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        <div style="flex-shrink:0;display:flex;flex-direction:column;gap:6px;align-items:flex-end;margin-left:auto;">
+          {% if cand.nppes_npi in approved_by_npi %}
+            {% for dup in approved_by_npi[cand.nppes_npi] %}
+              {% if dup.hhl_id != item.hhl_id %}
+                <span class="bw-tip bw-badge bw-badge--medium" tabindex="0" aria-describedby="tip-also-{{ item.hhl_id }}-{{ cand.nppes_npi }}-{{ loop.index }}" style="font-size:11px;cursor:help;">
+                  Also approved: {{ dup.name }}
+                  <span role="tooltip" id="tip-also-{{ item.hhl_id }}-{{ cand.nppes_npi }}-{{ loop.index }}" class="bw-tip__body bw-tip__body--right">This NPI is already approved for {{ dup.name }}. One NPI for multiple records is OK if the same provider serves both.</span>
+                </span>
+              {% endif %}
+            {% endfor %}
+          {% endif %}
+          <a href="/provider/{{ cand.nppes_npi }}?hhl_id={{ item.hhl_id }}" target="_blank" class="bw-btn bw-btn--ghost bw-btn--sm">Profile</a>
+          {% if (item.hhl_id, 'center', cand.nppes_npi) in decisions %}
+            <span style="font-size:12px;font-weight:600;color:var(--bw-success);">✓ Approved</span>
+            <form action="/undecide-npi/center/{{ item.hhl_id }}" method="post" style="margin:0;">
+              <input type="hidden" name="back" value="/centers?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&sibling={{ sibling_param }}&page={{ page }}#record-{{ item.hhl_id }}">
+              <input type="hidden" name="nppes_npi" value="{{ cand.nppes_npi }}">
+              <button type="submit" class="bw-btn bw-btn--ghost bw-btn--sm" style="font-size:11px;">Remove</button>
+            </form>
+          {% else %}
+            <form action="/decide/center/{{ item.hhl_id }}" method="post" style="margin:0;">
+              <input type="hidden" name="back" value="/centers?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&sibling={{ sibling_param }}&page={{ page }}#record-{{ item.hhl_id }}">
+              <input type="hidden" name="nppes_npi" value="{{ cand.nppes_npi }}">
+              <button type="button" data-decision="APPROVED" class="bw-btn bw-btn--sm" style="font-size:12px;" onclick="confirmDecision(this, event)">Approve</button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+      {% if _man_n.count >= 6 %}</div>{% endif %}
+    </div>
+    {% if _man_n.count > 5 %}
+    <div style="padding:10px 24px;border-top:1px solid var(--bw-rule);">
+      {% set _more_label2 = 'Show all ' ~ item.candidates|length ~ ' candidate' ~ ('s' if item.candidates|length != 1 else '') ~ ' ▾' %}
+      <button type="button"
+        id="show-more-btn-{{ item.hhl_id }}"
+        data-more-label="{{ _more_label2 }}"
+        onclick="
+          var d=document.getElementById('more-{{ item.hhl_id }}');
+          var btn=this;
+          var open=d.style.display!=='none';
+          d.style.display=open?'none':'block';
+          btn.textContent=open?btn.dataset.moreLabel:'Show fewer ▴';
+        "
+        class="bw-btn bw-btn--ghost bw-btn--sm">
+        {{ _more_label2 }}
+      </button>
+    </div>
+    {% endif %}
+
+    {% elif item.is_manual_multi and item.manual_collapsed %}
+    <!-- Collapsed: 1+ NPI approved, checkbox unchecked, still needs Mark Complete -->
+    <div style="border-top:1px solid var(--bw-rule);padding:14px 24px;background:var(--bw-surface-subtle);display:flex;flex-direction:column;gap:8px;">
+      <span style="font-size:12px;color:var(--bw-muted);">{{ item.approved_npi_count }} NPI{{ 's' if item.approved_npi_count != 1 else '' }} approved. Mark complete to finalize, or check "Multiple NPI's" to add more locations.</span>
+      {% for ac in item.approved_candidates %}
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span class="mono text-muted" style="font-size:12px;">{{ ac.nppes_npi }}{% if ac.nppes_name %} · {{ ac.nppes_name }}{% endif %}</span>
+        <form action="/undecide-npi/center/{{ item.hhl_id }}" method="post" style="margin:0;">
+          <input type="hidden" name="back" value="/centers?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&sibling={{ sibling_param }}&page={{ page }}#record-{{ item.hhl_id }}">
+          <input type="hidden" name="nppes_npi" value="{{ ac.nppes_npi }}">
+          <button type="submit" class="bw-btn bw-btn--ghost bw-btn--sm" style="font-size:11px;">Remove</button>
+        </form>
+      </div>
+      {% endfor %}
+    </div>
+
+    {% else %}
+    <!-- Normal non-sibling: more candidates (collapsed) -->
+    {% if item.candidates|length > 1 %}
+    <details style="border-top:1px solid var(--bw-rule);">
+      {% set _extra = item.candidates[1:5] | length %}
+      <summary class="text-muted" style="padding:10px 20px;font-size:12px;cursor:pointer;list-style:none;font-weight:600;">
+        <span aria-hidden="true">▾</span> {{ _extra }} more candidate{{ 's' if _extra > 1 else '' }}
+      </summary>
+      {% for cand in item.candidates[1:5] %}
+      <div style="padding:14px 24px;border-top:1px solid var(--bw-rule-subtle);display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;">
+        <div style="text-align:center;flex-shrink:0;">
+          <div style="font-size:13px;font-weight:700;color:var(--bw-muted);">#{{ cand.rank }}</div>
+          <div class="eyebrow" style="margin-top:4px;margin-bottom:1px;">Score</div>
+          <div style="font-size:12px;color:var(--bw-muted);margin:1px 0;" title="Match score (0–1). 0.7+ = strong, 0.4–0.7 = moderate, below 0.4 = weak.">{{ cand.match_score }}</div>
+          {{ conf_badge(cand.confidence) }}
+          {% if cand.candidate_strength %}<div style="margin-top:3px;">{{ strength_badge(cand.candidate_strength) }}</div>{% endif %}
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;font-size:13px;">{{ cand.nppes_name }}</div>
+          <div class="text-muted mono" style="font-size:12px;margin-top:2px;">{{ cand.nppes_npi }}{% if cand.match_source == "other_name" %} <span style="font-family:var(--bw-font-body);color:var(--bw-purple);">· via alternate name</span>{% elif cand.match_source == "keyword_match" %} <span style="font-family:var(--bw-font-body);color:var(--bw-purple);">· via keyword match</span>{% endif %}{% if 'perfect_name' in (cand.confidence_flags or '') %} <span style="font-family:var(--bw-font-body);color:var(--bw-success);">· exact name</span>{% endif %}</div>
+          {% if cand.nppes_address %}<div class="text-muted" style="font-size:12px;margin-top:2px;">{{ cand.nppes_address }}, {{ cand.nppes_city }}, {{ cand.nppes_state }} {{ cand.nppes_zip }}</div>{% endif %}
+          {% if cand.nppes_phone %}<div class="text-muted" style="font-size:12px;">{{ cand.nppes_phone }}</div>{% endif %}
+          {% if cand.signals_matched %}
+          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;">
+            {% for sig in cand.signals_matched.split('|') %}<span class="bw-signal">✓ {{ sig }}</span>{% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        <div style="flex-shrink:0;display:flex;flex-direction:column;gap:6px;align-items:flex-end;margin-left:auto;">
+          {% if cand.nppes_npi in approved_by_npi %}
+            {% for dup in approved_by_npi[cand.nppes_npi] %}
+              {% if dup.hhl_id != item.hhl_id %}
+                <span class="bw-tip bw-badge bw-badge--medium" tabindex="0" aria-describedby="tip-also-{{ item.hhl_id }}-{{ cand.nppes_npi }}-{{ loop.index }}" style="font-size:11px;cursor:help;">
+                  Also approved: {{ dup.name }}
+                  <span role="tooltip" id="tip-also-{{ item.hhl_id }}-{{ cand.nppes_npi }}-{{ loop.index }}" class="bw-tip__body bw-tip__body--right">This NPI is already approved for {{ dup.name }}. One NPI for multiple records is OK if the same provider serves both. Review carefully to confirm this is intentional.</span>
                 </span>
               {% endif %}
             {% endfor %}
           {% endif %}
           <form action="/decide/center/{{ item.hhl_id }}" method="post">
-            <input type="hidden" name="back" value="/centers?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&page={{ page }}">
+            <input type="hidden" name="back" value="/centers?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&sibling={{ sibling_param }}&page={{ page }}#record-{{ item.hhl_id }}">
             <input type="hidden" name="nppes_npi" value="{{ cand.nppes_npi }}">
             <button type="button" data-decision="APPROVED" class="bw-btn bw-btn--success bw-btn--sm" onclick="confirmDecision(this, event)">Approve #{{ cand.rank }}</button>
           </form>
@@ -295,18 +594,19 @@
       {% endfor %}
     </details>
     {% endif %}
+    {% endif %}
 
   {% endif %}
   {% endif %}{# end decided/pending #}
 </div>
 {% endfor %}
 
-{% set qs = "conf=" ~ filter_conf ~ "&dec=" ~ filter_dec ~ "&state=" ~ filter_state ~ "&sort=" ~ sort ~ "&per_page=" ~ per_page ~ "&q=" ~ search %}
+{% set qs = "conf=" ~ filter_conf ~ "&dec=" ~ filter_dec ~ "&state=" ~ filter_state ~ "&sort=" ~ sort ~ "&per_page=" ~ per_page ~ "&q=" ~ search ~ "&sibling=" ~ sibling_param %}
 {% if total > per_page %}
 <div class="bw-pagination">
-  {% if page > 1 %}<a href="/centers?{{ qs }}&page={{ page - 1 }}">← Prev</a>{% endif %}
+  {% if page > 1 %}<a href="/centers?{{ qs }}&page={{ page - 1 }}" aria-label="Previous page">← Prev</a>{% endif %}
   <span class="bw-pagination__info">Page {{ page }} of {{ ((total - 1) // per_page) + 1 }} &nbsp;·&nbsp; {{ total }} records</span>
-  {% if page * per_page < total %}<a href="/centers?{{ qs }}&page={{ page + 1 }}">Next →</a>{% endif %}
+  {% if page * per_page < total %}<a href="/centers?{{ qs }}&page={{ page + 1 }}" aria-label="Next page">Next →</a>{% endif %}
 </div>
 {% else %}
 <p style="text-align:center;margin-top:20px;font-size:12px;" class="text-muted">{{ total }} records</p>
@@ -329,6 +629,19 @@
       }
       form.submit();
       return;
+    }
+    const _dec = btn.dataset.decision;
+    if (_dec === 'FLAGGED' || _dec === 'REJECTED') {
+      const _form = btn.closest('form');
+      const _notes = _form && _form.querySelector('input[name="notes"]');
+      if (_notes && !_notes.value.trim()) {
+        alert('Please enter a note with the reason for this decision.');
+        _notes.style.outline = '2px solid var(--bw-error)';
+        _notes.style.outlineOffset = '2px';
+        _notes.focus();
+        _notes.addEventListener('input', function() { _notes.style.outline = ''; }, {once: true});
+        return;
+      }
     }
     btn.closest('form').querySelectorAll('[data-confirming]').forEach(other => resetDecisionBtn(other));
     btn.dataset.confirming = '1';
@@ -367,21 +680,38 @@
     }, 3000);
   }
 
-  // Guard "Show all" when record count is large
-  (function () {
-    const form = document.querySelector('form[action="/centers"]');
-    const ppSel = document.getElementById('filter-per-page');
-    const pageTotal = {{ total }};
-    if (form && ppSel) {
-      form.addEventListener('submit', function (e) {
-        if (ppSel.value === '999999' && pageTotal > 300) {
-          if (!confirm('Load all ' + pageTotal + ' records? This may slow your browser.')) {
-            e.preventDefault();
-          }
-        }
-      });
+  function guardShowAll(btn, e) {
+    var ppSel = document.getElementById('filter-per-page');
+    var pageTotal = {{ total }};
+    if (ppSel && ppSel.value === '999999' && pageTotal > 300) {
+      if (!btn.dataset.confirming) {
+        e.preventDefault();
+        btn.dataset.confirming = '1';
+        btn._origText = btn.textContent;
+        btn._origClass = btn.className;
+        btn.classList.add('bw-btn--confirming');
+        btn.classList.remove('bw-btn--primary');
+        btn.textContent = 'Load all ' + pageTotal + '?';
+        btn._guardTimer = setTimeout(function() { resetGuardBtn(btn); }, 3000);
+      }
     }
-  }());
+  }
+  function resetGuardBtn(btn) {
+    clearTimeout(btn._guardTimer);
+    delete btn.dataset.confirming;
+    btn.className = btn._origClass;
+    btn.textContent = btn._origText;
+  }
+
+  // Notes character counters
+  document.querySelectorAll('input[name="notes"]').forEach(function(inp) {
+    var ctr = document.createElement('span');
+    ctr.className = 'text-muted';
+    ctr.style.cssText = 'font-size:11px;white-space:nowrap;flex-shrink:0;';
+    ctr.textContent = (inp.value.length || 0) + '/500';
+    inp.insertAdjacentElement('afterend', ctr);
+    inp.addEventListener('input', function() { ctr.textContent = inp.value.length + '/500'; });
+  });
 </script>
 
 {% endblock %}

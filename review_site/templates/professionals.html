@@ -1,12 +1,24 @@
 {% extends "base.html" %}
 {% block title %}Professionals — NPI Review{% endblock %}
 {% block content %}
+<style>
+@media (max-width: 640px) {
+  form[action="/professionals"] .bw-input,
+  form[action="/professionals"] .bw-select { width: 100% !important; }
+}
+</style>
 
 {% macro conf_badge(conf) %}
   {% if conf == "HIGH" %}<span class="bw-badge bw-badge--high">HIGH</span>
   {% elif conf == "MEDIUM" %}<span class="bw-badge bw-badge--medium">MEDIUM</span>
   {% elif conf == "LOW" %}<span class="bw-badge bw-badge--low">LOW</span>
   {% else %}<span class="bw-badge bw-badge--gray">{{ conf }}</span>{% endif %}
+{% endmacro %}
+
+{% macro strength_badge(strength) %}
+  {% if strength in ["STRONG", "MODERATE", "WEAK"] %}
+  <span class="bw-tip bw-badge bw-badge--strength-{{ strength | lower }}" tabindex="0">{{ strength }}<span role="tooltip" class="bw-tip__body">Candidate strength: how well-supported this match is. STRONG = multiple high-quality signals (name, address, phone). MODERATE = partial signals matched. WEAK = limited or marginal evidence.</span></span>
+  {% endif %}
 {% endmacro %}
 
 {% set _return_to = request.args.get('return_to', '') %}
@@ -39,18 +51,19 @@
 <form method="get" action="/professionals" class="bw-filter-bar">
   <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px;">
     <input type="text" name="q" value="{{ search }}" placeholder="Search by name…"
+           aria-label="Search by name"
            class="bw-input" style="width:220px;" maxlength="200">
-    <select name="state" class="bw-select" style="width:140px;">
+    <select name="state" aria-label="Filter by state" class="bw-select" style="width:140px;">
       <option value="all" {% if filter_state == 'all' %}selected{% endif %}>All states</option>
       {% for s in states %}<option value="{{ s }}" {% if filter_state == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
     </select>
-    <select name="sort" class="bw-select" style="width:170px;">
+    <select name="sort" aria-label="Sort order" class="bw-select" style="width:170px;">
       <option value="conf"  {% if sort == 'conf'  %}selected{% endif %}>Sort: Confidence</option>
       <option value="score" {% if sort == 'score' %}selected{% endif %}>Sort: Match Score</option>
       <option value="name"  {% if sort == 'name'  %}selected{% endif %}>Sort: Name A–Z</option>
       <option value="state" {% if sort == 'state' %}selected{% endif %}>Sort: State</option>
     </select>
-    <select name="per_page" id="filter-per-page" class="bw-select" style="width:130px;">
+    <select name="per_page" id="filter-per-page" aria-label="Records per page" class="bw-select" style="width:130px;">
       {% for n in [50, 100, 250] %}
         <option value="{{ n }}" {% if per_page == n %}selected{% endif %}>{{ n }} per page</option>
       {% endfor %}
@@ -103,7 +116,7 @@
   <!-- ── DECIDED: compact summary ── -->
   <details>
     <summary style="list-style:none;cursor:pointer;" class="bw-record__header">
-      <span class="bw-record__name">{{ item.meta.hhl_name }}</span>
+      <span class="bw-record__name" role="heading" aria-level="2">{{ item.meta.hhl_name }}</span>
       {% if item.meta.hhl_type %}<span class="bw-badge bw-badge--navy">{{ item.meta.hhl_type }}</span>{% endif %}
       <span class="bw-record__meta">{{ item.meta.hhl_center_name }} · {{ item.meta.hhl_state }}</span>
       <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
@@ -121,7 +134,7 @@
                   onclick="confirmUndo(this, event)"
                   class="bw-btn bw-btn--danger bw-btn--sm">Undo</button>
         </form>
-        <span class="text-muted" style="font-size:11px;" aria-hidden="true">▾</span>
+        <span style="font-size:11px;color:var(--bw-ink-2);" aria-hidden="true">▾</span>
       </div>
     </summary>
 
@@ -131,16 +144,17 @@
       {% else %}
         {% for cand in item.candidates %}
         <div style="padding:14px 24px;{% if not loop.first %}border-top:1px solid var(--bw-rule-subtle);{% endif %}{% if loop.first %}background:var(--bw-surface-subtle);{% endif %}display:flex;align-items:flex-start;gap:16px;">
-          <div style="text-align:center;width:44px;flex-shrink:0;">
+          <div style="text-align:center;flex-shrink:0;">
             <div style="font-size:13px;font-weight:700;color:var(--bw-muted);">#{{ cand.rank }}</div>
-            <div style="font-size:11px;color:var(--bw-muted);margin:1px 0;">{{ cand.match_score }}</div>
+            <div style="font-size:12px;color:var(--bw-muted);margin:1px 0;">{{ cand.match_score }}</div>
             {{ conf_badge(cand.confidence) }}
+            {% if cand.candidate_strength %}<div style="margin-top:3px;">{{ strength_badge(cand.candidate_strength) }}</div>{% endif %}
           </div>
           <div style="flex:1;min-width:0;">
             <div style="font-weight:600;font-size:13px;">
               {{ cand.nppes_first_name }} {{ cand.nppes_last_name }}{% if cand.nppes_credential %}<span class="text-muted">, {{ cand.nppes_credential }}</span>{% endif %}
             </div>
-            <div class="text-muted mono" style="font-size:12px;margin-top:2px;">{{ cand.nppes_npi }}{% if cand.nppes_taxonomy_code %} · {{ cand.nppes_taxonomy_code }}{% endif %}</div>
+            <div class="text-muted mono" style="font-size:12px;margin-top:2px;">{{ cand.nppes_npi }}{% if cand.nppes_taxonomy_code %} · {{ cand.nppes_taxonomy_code }}{% endif %}{% if 'perfect_name' in cand.confidence_flags %} <span style="font-family:var(--bw-font-body);color:var(--bw-success);">· exact name</span>{% endif %}</div>
             {% if cand.nppes_address %}<div class="text-muted" style="font-size:12px;margin-top:2px;">{{ cand.nppes_address }}, {{ cand.nppes_city }}, {{ cand.nppes_state }} {{ cand.nppes_zip }}</div>{% endif %}
             {% if cand.signals_matched %}
             <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;">
@@ -164,7 +178,7 @@
   <!-- ── PENDING: full review ── -->
 
   <div class="bw-record__header">
-    <span class="bw-record__name">{{ item.meta.hhl_name }}</span>
+    <span class="bw-record__name" role="heading" aria-level="2">{{ item.meta.hhl_name }}</span>
     {% if item.meta.hhl_type %}<span class="bw-badge bw-badge--navy">{{ item.meta.hhl_type }}</span>{% endif %}
     <span class="bw-record__meta">{{ item.meta.hhl_center_name }} · {{ item.meta.hhl_state }}</span>
     {% if item.meta.hhl_email %}<span class="text-muted" style="font-size:12px;">{{ item.meta.hhl_email }}</span>{% endif %}
@@ -182,7 +196,7 @@
     <form action="/decide/professional/{{ item.hhl_id }}" method="post" style="padding:12px 24px;border-top:1px solid var(--bw-rule);background:var(--bw-surface-subtle);display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
       <input type="hidden" name="back" value="/professionals?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&page={{ page }}">
       <input type="hidden" name="nppes_npi" value="">
-      <input type="text" name="notes" placeholder="Notes (optional)" aria-label="Notes" class="bw-input" style="width:180px;padding:7px 10px;font-size:12px;" maxlength="500">
+      <input type="text" name="notes" placeholder="Add a note (optional)…" aria-label="Notes" class="bw-input" style="flex:1;min-width:160px;padding:7px 10px;font-size:12px;" maxlength="500">
       <button type="button" data-decision="FLAGGED"  class="bw-btn bw-btn--warn bw-btn--sm"   onclick="confirmDecision(this, event)">Flag</button>
       <button type="button" data-decision="REJECTED" class="bw-btn bw-btn--danger bw-btn--sm" onclick="confirmDecision(this, event)">No Match</button>
     </form>
@@ -193,10 +207,11 @@
     <!-- Best candidate -->
     <div class="bw-candidate {% if best.confidence == 'HIGH' %}bw-candidate--best-high{% elif best.confidence == 'MEDIUM' %}bw-candidate--best-medium{% else %}bw-candidate--best-other{% endif %}">
       <div style="display:flex;align-items:flex-start;gap:16px;">
-        <div style="text-align:center;width:44px;flex-shrink:0;padding-top:2px;">
+        <div style="text-align:center;flex-shrink:0;padding-top:2px;">
           <div class="eyebrow" style="margin-bottom:3px;">Best</div>
-          <div style="font-size:11px;color:var(--bw-muted);margin-bottom:3px;">{{ best.match_score }}</div>
+          <div style="font-size:12px;color:var(--bw-muted);margin-bottom:3px;">{{ best.match_score }}</div>
           {{ conf_badge(best.confidence) }}
+          {% if best.candidate_strength %}<div style="margin-top:3px;">{{ strength_badge(best.candidate_strength) }}</div>{% endif %}
         </div>
 
         <div style="flex:1;min-width:0;">
@@ -204,7 +219,7 @@
             {{ best.nppes_first_name }} {{ best.nppes_last_name }}
             {% if best.nppes_credential %}<span class="text-muted" style="font-weight:400;">, {{ best.nppes_credential }}</span>{% endif %}
           </div>
-          <div class="text-muted mono" style="font-size:12px;margin-top:3px;">{{ best.nppes_npi }}</div>
+          <div class="text-muted mono" style="font-size:12px;margin-top:3px;">{{ best.nppes_npi }}{% if 'perfect_name' in best.confidence_flags %} <span style="font-family:var(--bw-font-body);color:var(--bw-success);">· exact name</span>{% endif %}</div>
           {% if best.nppes_taxonomy_code %}
           <div class="text-muted" style="font-size:12px;margin-top:2px;display:flex;align-items:center;gap:4px;">
             <span class="mono">{{ best.nppes_taxonomy_code }}</span>
@@ -251,7 +266,7 @@
       <form action="/decide/professional/{{ item.hhl_id }}" method="post" class="bw-action-bar">
         <input type="hidden" name="back" value="/professionals?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&page={{ page }}">
         <input type="hidden" name="nppes_npi" value="{{ best.nppes_npi }}">
-        <input type="text" name="notes" placeholder="Notes (optional)" aria-label="Notes" class="bw-input" style="width:180px;padding:7px 10px;font-size:12px;" maxlength="500">
+        <input type="text" name="notes" placeholder="Add a note (optional)…" aria-label="Notes" class="bw-input" style="flex:1;min-width:160px;padding:7px 10px;font-size:12px;" maxlength="500">
         <button type="button" data-decision="APPROVED" class="bw-btn bw-btn--success" onclick="confirmDecision(this, event)">✓ Confirm Match</button>
         <button type="button" data-decision="FLAGGED" data-npi="" class="bw-btn bw-btn--warn bw-btn--sm" onclick="confirmDecision(this, event)">Flag</button>
         <span class="bw-tip" tabindex="0" style="display:inline-flex;align-items:center;margin-left:-2px;">
@@ -266,14 +281,15 @@
     {% if item.candidates|length > 1 %}
     <details style="border-top:1px solid var(--bw-rule);">
       <summary class="text-muted" style="padding:10px 20px;font-size:12px;cursor:pointer;list-style:none;font-weight:600;">
-        <span aria-hidden="true">▾</span> {{ item.candidates|length - 1 }} more candidate{{ 's' if item.candidates|length > 2 }}
+        <span aria-hidden="true" style="color:var(--bw-ink-2);">▾</span> {{ item.candidates|length - 1 }} more candidate{{ 's' if item.candidates|length > 2 }}
       </summary>
       {% for cand in item.candidates[1:] %}
       <div style="padding:14px 24px;border-top:1px solid var(--bw-rule-subtle);display:flex;align-items:flex-start;gap:16px;">
-        <div style="text-align:center;width:44px;flex-shrink:0;">
+        <div style="text-align:center;flex-shrink:0;">
           <div style="font-size:13px;font-weight:700;color:var(--bw-muted);">#{{ cand.rank }}</div>
-          <div style="font-size:11px;color:var(--bw-muted);margin:1px 0;">{{ cand.match_score }}</div>
+          <div style="font-size:12px;color:var(--bw-muted);margin:1px 0;">{{ cand.match_score }}</div>
           {{ conf_badge(cand.confidence) }}
+          {% if cand.candidate_strength %}<div style="margin-top:3px;">{{ strength_badge(cand.candidate_strength) }}</div>{% endif %}
         </div>
         <div style="flex:1;min-width:0;">
           <div style="font-weight:600;font-size:13px;">
@@ -344,6 +360,19 @@
       form.submit();
       return;
     }
+    const _dec = btn.dataset.decision;
+    if (_dec === 'FLAGGED' || _dec === 'REJECTED') {
+      const _form = btn.closest('form');
+      const _notes = _form && _form.querySelector('input[name="notes"]');
+      if (_notes && !_notes.value.trim()) {
+        alert('Please enter a note with the reason for this decision.');
+        _notes.style.outline = '2px solid var(--bw-error)';
+        _notes.style.outlineOffset = '2px';
+        _notes.focus();
+        _notes.addEventListener('input', function() { _notes.style.outline = ''; }, {once: true});
+        return;
+      }
+    }
     btn.closest('form').querySelectorAll('[data-confirming]').forEach(other => resetDecisionBtn(other));
     btn.dataset.confirming = '1';
     btn._origText = btn.textContent;
@@ -351,6 +380,7 @@
     btn.classList.add('bw-btn--confirming');
     btn.classList.remove('bw-btn--success', 'bw-btn--danger', 'bw-btn--warn');
     btn.textContent = 'Confirm?';
+    btn.setAttribute('aria-label', 'Confirm this decision?');
     btn._decTimer = setTimeout(() => resetDecisionBtn(btn), 3000);
   }
 
@@ -359,6 +389,7 @@
     delete btn.dataset.confirming;
     btn.className = btn._origClass;
     btn.textContent = btn._origText;
+    btn.removeAttribute('aria-label');
   }
 
   function confirmUndo(btn, e) {
@@ -381,7 +412,24 @@
     }, 3000);
   }
 
-  // Guard "Show all" when record count is large
+  // Sync live form state when a filter chip is clicked
+  document.querySelectorAll('a.bw-chip').forEach(function(chip) {
+    chip.addEventListener('click', function(e) {
+      e.preventDefault();
+      const url = new URL(chip.href);
+      const form = document.querySelector('form[action="/professionals"]');
+      if (!form) return;
+      const confInp = form.querySelector('input[name="conf"]');
+      const decInp  = form.querySelector('input[name="dec"]');
+      const newConf = url.searchParams.get('conf');
+      const newDec  = url.searchParams.get('dec');
+      if (confInp && newConf !== null) confInp.value = newConf;
+      if (decInp  && newDec  !== null) decInp.value  = newDec;
+      form.submit();
+    });
+  });
+
+  // Guard "Show all" when record count is large — 2-step inline confirm (no window.confirm)
   (function () {
     const form = document.querySelector('form[action="/professionals"]');
     const ppSel = document.getElementById('filter-per-page');
@@ -389,8 +437,23 @@
     if (form && ppSel) {
       form.addEventListener('submit', function (e) {
         if (ppSel.value === '999999' && pageTotal > 300) {
-          if (!confirm('Load all ' + pageTotal + ' records? This may slow your browser.')) {
+          const applyBtn = form.querySelector('button[type="submit"]');
+          if (!applyBtn.dataset.confirming) {
             e.preventDefault();
+            applyBtn.dataset.confirming = '1';
+            applyBtn._origText  = applyBtn.textContent;
+            applyBtn._origClass = applyBtn.className;
+            applyBtn.classList.add('bw-btn--confirming');
+            applyBtn.classList.remove('bw-btn--primary');
+            applyBtn.textContent = 'Load all ' + pageTotal + '?';
+            applyBtn._timer = setTimeout(function () {
+              delete applyBtn.dataset.confirming;
+              applyBtn.className  = applyBtn._origClass;
+              applyBtn.textContent = applyBtn._origText;
+            }, 3000);
+          } else {
+            clearTimeout(applyBtn._timer);
+            delete applyBtn.dataset.confirming;
           }
         }
       });
