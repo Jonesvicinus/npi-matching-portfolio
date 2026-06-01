@@ -88,7 +88,7 @@ CREDENTIAL_KEYWORDS = {
 
 OUTPUT_FIELDS = [
     "hhl_role_id", "hhl_first_name", "hhl_last_name", "hhl_type", "hhl_email",
-    "hhl_medical_center_id", "hhl_medical_center_name", "hhl_state", "hhl_city",
+    "hhl_phone", "hhl_medical_center_id", "hhl_medical_center_name", "hhl_state", "hhl_city",
     "rank", "confidence", "match_score", "signals_matched",
     "candidate_strength", "name_score", "city_score", "credential_score", "taxonomy_score", "phone_score",
     "margin", "confidence_flags", "candidate_count",
@@ -202,6 +202,7 @@ def process_professional(args):
         "hhl_last_name":           last_name,
         "hhl_type":                prof_type,
         "hhl_email":               email,
+        "hhl_phone":               prof.get("phone", ""),
         "hhl_medical_center_id":   center_id,
         "hhl_medical_center_name": center_name,
         "hhl_state":               state_abbr or "",

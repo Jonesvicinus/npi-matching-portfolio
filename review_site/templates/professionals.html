@@ -1,6 +1,36 @@
 {% extends "base.html" %}
 {% block title %}Professionals — NPI Review{% endblock %}
 {% block content %}
+{% macro compare_btn(hhl_item, c) %}
+{% set _d = {
+  "type":             "professional",
+  "hhlName":          hhl_item.meta.hhl_name,
+  "candidateRank":    c.rank,
+  "candidateCount":   hhl_item.candidates | length,
+  "matchScore":       c.match_score,
+  "confidence":       c.confidence,
+  "candidateStrength":c.candidate_strength,
+  "signalsMatched":   c.signals_matched or "",
+  "hhlType":          hhl_item.meta.hhl_type,
+  "hhlEmail":         hhl_item.meta.hhl_email,
+  "hhlCenterName":    hhl_item.meta.hhl_center_name,
+  "hhlState":         hhl_item.meta.hhl_state,
+  "nppesNpi":         c.nppes_npi,
+  "nppesFirstName":   c.nppes_first_name,
+  "nppesLastName":    c.nppes_last_name,
+  "nppesCredential":  c.nppes_credential,
+  "nppesTaxonomy":    c.nppes_taxonomy_code,
+  "nppesAddress":     c.nppes_address,
+  "nppesCity":        c.nppes_city,
+  "nppesState":       c.nppes_state,
+  "nppesZip":         c.nppes_zip,
+  "nppesPhone":       c.nppes_phone
+} %}
+<button type="button"
+  class="bw-btn bw-btn--ghost bw-btn--sm"
+  aria-label="Compare HHL and NPPES data for this candidate"
+  onclick='openCompare({{ _d | tojson }})'>Compare</button>
+{% endmacro %}
 <style>
 @media (max-width: 640px) {
   form[action="/professionals"] .bw-input,
@@ -116,7 +146,18 @@
   <!-- ── DECIDED: compact summary ── -->
   <details>
     <summary style="list-style:none;cursor:pointer;" class="bw-record__header">
-      <span class="bw-record__name" role="heading" aria-level="2">{{ item.meta.hhl_name }}</span>
+      {% set _hhl_d = {
+        "type": "professional",
+        "hhlName": item.meta.hhl_name,
+        "hhlSpecialty": item.meta.hhl_type,
+        "hhlEmail": item.meta.hhl_email,
+        "hhlPhone": item.meta.hhl_phone,
+        "hhlCenterName": item.meta.hhl_center_name,
+        "hhlState": item.meta.hhl_state
+      } %}
+      <button type="button" class="bw-record__name bw-record__name--link"
+        title="View HHL profile"
+        onclick='event.stopPropagation(); openHhl({{ _hhl_d | tojson }})'>{{ item.meta.hhl_name }}</button>
       {% if item.meta.hhl_type %}<span class="bw-badge bw-badge--navy">{{ item.meta.hhl_type }}</span>{% endif %}
       <span class="bw-record__meta">{{ item.meta.hhl_center_name }} · {{ item.meta.hhl_state }}</span>
       <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
@@ -166,7 +207,9 @@
             {% if decided.nppes_npi == cand.nppes_npi %}
               <span style="font-size:12px;font-weight:600;color:var(--bw-success);">✓ Selected</span>
             {% endif %}
-            <a href="/provider/{{ cand.nppes_npi }}" target="_blank" class="bw-btn bw-btn--ghost bw-btn--sm">Profile</a>
+            <button type="button" class="bw-btn bw-btn--ghost bw-btn--sm"
+              onclick='openNppes({{ cand.nppes_npi | tojson }})'>Profile</button>
+            {{ compare_btn(item, cand) }}
           </div>
         </div>
         {% endfor %}
@@ -178,7 +221,18 @@
   <!-- ── PENDING: full review ── -->
 
   <div class="bw-record__header">
-    <span class="bw-record__name" role="heading" aria-level="2">{{ item.meta.hhl_name }}</span>
+    {% set _hhl_d = {
+      "type": "professional",
+      "hhlName": item.meta.hhl_name,
+      "hhlSpecialty": item.meta.hhl_type,
+      "hhlEmail": item.meta.hhl_email,
+      "hhlPhone": item.meta.hhl_phone,
+      "hhlCenterName": item.meta.hhl_center_name,
+      "hhlState": item.meta.hhl_state
+    } %}
+    <button type="button" class="bw-record__name bw-record__name--link"
+      title="View HHL profile"
+      onclick='openHhl({{ _hhl_d | tojson }})'>{{ item.meta.hhl_name }}</button>
     {% if item.meta.hhl_type %}<span class="bw-badge bw-badge--navy">{{ item.meta.hhl_type }}</span>{% endif %}
     <span class="bw-record__meta">{{ item.meta.hhl_center_name }} · {{ item.meta.hhl_state }}</span>
     {% if item.meta.hhl_email %}<span class="text-muted" style="font-size:12px;">{{ item.meta.hhl_email }}</span>{% endif %}
@@ -246,7 +300,9 @@
         </div>
 
         <div style="flex-shrink:0;display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
-          <a href="/provider/{{ best.nppes_npi }}" target="_blank" class="bw-btn bw-btn--ghost bw-btn--sm">Profile</a>
+          <button type="button" class="bw-btn bw-btn--ghost bw-btn--sm"
+            onclick='openNppes({{ best.nppes_npi | tojson }})'>Profile</button>
+          {{ compare_btn(item, best) }}
         </div>
       </div>
 
@@ -319,7 +375,9 @@
             <input type="hidden" name="nppes_npi" value="{{ cand.nppes_npi }}">
             <button type="button" data-decision="APPROVED" class="bw-btn bw-btn--success bw-btn--sm" onclick="confirmDecision(this, event)">Approve #{{ cand.rank }}</button>
           </form>
-          <a href="/provider/{{ cand.nppes_npi }}" target="_blank" class="bw-btn bw-btn--ghost bw-btn--sm">Profile</a>
+          <button type="button" class="bw-btn bw-btn--ghost bw-btn--sm"
+              onclick='openNppes({{ cand.nppes_npi | tojson }})'>Profile</button>
+          {{ compare_btn(item, cand) }}
         </div>
       </div>
       {% endfor %}

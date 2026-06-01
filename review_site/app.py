@@ -16,7 +16,7 @@ import os
 import sqlite3
 from datetime import datetime, timezone
 
-from flask import Flask, flash, get_flashed_messages, redirect, render_template, request, url_for, Response
+from flask import Flask, flash, get_flashed_messages, jsonify, redirect, render_template, request, url_for, Response
 from markupsafe import Markup, escape
 
 BASE_DIR     = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -321,6 +321,7 @@ def load_match_csv(path):
                         "hhl_last_name":   row.get("hhl_last_name", ""),
                         "hhl_type":        row.get("hhl_type", ""),
                         "hhl_email":       row.get("hhl_email", ""),
+                        "hhl_phone":       row.get("hhl_phone", ""),
                         "hhl_center_id":   row.get("hhl_medical_center_id", ""),
                         "hhl_center_name": row.get("hhl_medical_center_name", ""),
                         "hhl_state":       row.get("hhl_state", ""),
@@ -965,6 +966,13 @@ def bulk_approve(hhl_type):
     flash(f"Bulk approved {approved} HIGH confidence {label}{'s' if approved != 1 else ''}.", "approved")
     return redirect(f"/{hhl_type}s?dec=APPROVED")
 
+
+@app.route("/api/provider/<npi>")
+def api_provider(npi):
+    data = get_provider_full(npi)
+    if not data:
+        return jsonify({"error": "not found"}), 404
+    return jsonify(data)
 
 @app.route("/provider/<npi>")
 def provider(npi):

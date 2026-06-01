@@ -1,6 +1,32 @@
 {% extends "base.html" %}
 {% block title %}Centers — NPI Review{% endblock %}
 {% block content %}
+{% macro compare_btn(hhl_item, c) %}
+{% set _d = {
+  "type":             "center",
+  "hhlName":          hhl_item.meta.hhl_name,
+  "candidateRank":    c.rank,
+  "candidateCount":   hhl_item.candidates | length,
+  "matchScore":       c.match_score,
+  "confidence":       c.confidence,
+  "candidateStrength":c.candidate_strength,
+  "signalsMatched":   c.signals_matched or "",
+  "hhlCity":          hhl_item.meta.hhl_city,
+  "hhlState":         hhl_item.meta.hhl_state,
+  "hhlUrl":           hhl_item.meta.hhl_url,
+  "nppesNpi":         c.nppes_npi,
+  "nppesName":        c.nppes_name,
+  "nppesAddress":     c.nppes_address,
+  "nppesCity":        c.nppes_city,
+  "nppesState":       c.nppes_state,
+  "nppesZip":         c.nppes_zip,
+  "nppesPhone":       c.nppes_phone
+} %}
+<button type="button"
+  class="bw-btn bw-btn--ghost bw-btn--sm"
+  aria-label="Compare HHL and NPPES data for this candidate"
+  onclick='openCompare({{ _d | tojson }})'>Compare</button>
+{% endmacro %}
 
 {% macro conf_badge(conf) %}
   {% if conf == "HIGH" %}<span class="bw-badge bw-badge--high">HIGH</span>
@@ -129,7 +155,16 @@
   <!-- ── DECIDED: compact summary ── -->
   <details>
     <summary style="list-style:none;cursor:pointer;" class="bw-record__header">
-      <span class="bw-record__name">{{ item.meta.hhl_name }}</span>
+      {% set _hhl_d = {
+        "type": "center",
+        "hhlName": item.meta.hhl_name,
+        "hhlCity": item.meta.hhl_city,
+        "hhlState": item.meta.hhl_state,
+        "hhlUrl": item.meta.hhl_url
+      } %}
+      <button type="button" class="bw-record__name bw-record__name--link"
+        title="View HHL profile"
+        onclick='event.stopPropagation(); openHhl({{ _hhl_d | tojson }})'>{{ item.meta.hhl_name }}</button>
       <span class="bw-record__meta">{{ item.meta.hhl_city }}{% if item.meta.hhl_city and item.meta.hhl_state %}, {% endif %}{{ item.meta.hhl_state }}</span>
       <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
         {% if item.decision_status == "APPROVED" %}
@@ -184,7 +219,9 @@
             {% if cand.nppes_npi in item.approved_npis %}
               <span style="font-size:12px;font-weight:600;color:var(--bw-success);">✓ Selected</span>
             {% endif %}
-            <a href="/provider/{{ cand.nppes_npi }}" target="_blank" class="bw-btn bw-btn--ghost bw-btn--sm">Profile</a>
+            <button type="button" class="bw-btn bw-btn--ghost bw-btn--sm"
+              onclick='openNppes({{ cand.nppes_npi | tojson }})'>Profile</button>
+            {{ compare_btn(item, cand) }}
           </div>
         </div>
         {% endfor %}
@@ -196,7 +233,16 @@
   <!-- ── PENDING: full review ── -->
 
   <div class="bw-record__header">
-    <span class="bw-record__name">{{ item.meta.hhl_name }}</span>
+    {% set _hhl_d = {
+      "type": "center",
+      "hhlName": item.meta.hhl_name,
+      "hhlCity": item.meta.hhl_city,
+      "hhlState": item.meta.hhl_state,
+      "hhlUrl": item.meta.hhl_url
+    } %}
+    <button type="button" class="bw-record__name bw-record__name--link"
+      title="View HHL profile"
+      onclick='openHhl({{ _hhl_d | tojson }})'>{{ item.meta.hhl_name }}</button>
     <span class="bw-record__meta">{{ item.meta.hhl_city }}{% if item.meta.hhl_city and item.meta.hhl_state %}, {% endif %}{{ item.meta.hhl_state }}</span>
     {% if item.meta.hhl_url %}
       <a href="{{ item.meta.hhl_url }}" target="_blank" class="text-brand" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;max-width:280px;white-space:nowrap;">{{ item.meta.hhl_url }}</a>
@@ -310,7 +356,9 @@
         </div>
 
         <div style="flex-shrink:0;display:flex;flex-direction:column;gap:6px;align-items:flex-end;margin-left:auto;">
-          <a href="/provider/{{ best.nppes_npi }}?hhl_id={{ item.hhl_id }}" target="_blank" class="bw-btn bw-btn--ghost bw-btn--sm">Profile</a>
+          <button type="button" class="bw-btn bw-btn--ghost bw-btn--sm"
+            onclick='openNppes({{ best.nppes_npi | tojson }})'>Profile</button>
+          {{ compare_btn(item, best) }}
         </div>
       </div>
 
@@ -411,7 +459,9 @@
               {% endif %}
             {% endfor %}
           {% endif %}
-          <a href="/provider/{{ cand.nppes_npi }}?hhl_id={{ item.hhl_id }}" target="_blank" class="bw-btn bw-btn--ghost bw-btn--sm">Profile</a>
+          <button type="button" class="bw-btn bw-btn--ghost bw-btn--sm"
+            onclick='openNppes({{ cand.nppes_npi | tojson }})'>Profile</button>
+          {{ compare_btn(item, cand) }}
           {% if (item.hhl_id, 'center', cand.nppes_npi) in decisions %}
             <span style="font-size:12px;font-weight:600;color:var(--bw-success);">✓ Approved</span>
             <form action="/undecide-npi/center/{{ item.hhl_id }}" method="post" style="margin:0;">
@@ -489,7 +539,9 @@
               {% endif %}
             {% endfor %}
           {% endif %}
-          <a href="/provider/{{ cand.nppes_npi }}?hhl_id={{ item.hhl_id }}" target="_blank" class="bw-btn bw-btn--ghost bw-btn--sm">Profile</a>
+          <button type="button" class="bw-btn bw-btn--ghost bw-btn--sm"
+            onclick='openNppes({{ cand.nppes_npi | tojson }})'>Profile</button>
+          {{ compare_btn(item, cand) }}
           {% if (item.hhl_id, 'center', cand.nppes_npi) in decisions %}
             <span style="font-size:12px;font-weight:600;color:var(--bw-success);">✓ Approved</span>
             <form action="/undecide-npi/center/{{ item.hhl_id }}" method="post" style="margin:0;">
@@ -588,7 +640,9 @@
             <input type="hidden" name="nppes_npi" value="{{ cand.nppes_npi }}">
             <button type="button" data-decision="APPROVED" class="bw-btn bw-btn--success bw-btn--sm" onclick="confirmDecision(this, event)">Approve #{{ cand.rank }}</button>
           </form>
-          <a href="/provider/{{ cand.nppes_npi }}" target="_blank" class="bw-btn bw-btn--ghost bw-btn--sm">Profile</a>
+          <button type="button" class="bw-btn bw-btn--ghost bw-btn--sm"
+              onclick='openNppes({{ cand.nppes_npi | tojson }})'>Profile</button>
+          {{ compare_btn(item, cand) }}
         </div>
       </div>
       {% endfor %}
