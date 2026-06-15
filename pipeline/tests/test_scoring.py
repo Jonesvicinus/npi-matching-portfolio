@@ -461,3 +461,10 @@ class TestAssessSelectionConfidence:
         assert r2_tier == "MEDIUM"
         assert "margin_too_close" in r1_flags
         assert "margin_too_close" in r2_flags
+
+
+class TestSiblingConstants:
+    def test_sibling_constants_exist_with_expected_values(self):
+        import match_medical_centers as mmc
+        assert mmc.SIBLING_NAME_THRESHOLD == 0.97
+        assert mmc.SIBLING_FLAG_THRESHOLD == 0.90

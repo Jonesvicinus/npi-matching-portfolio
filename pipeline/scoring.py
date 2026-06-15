@@ -7,6 +7,13 @@ HIGH_THRESHOLD        = 0.85
 MEDIUM_THRESHOLD      = 0.65
 CITY_MISSING_CEILING  = 0.92   # raised: allow perfect name matches to reach HIGH
 
+# Sibling-location detection thresholds (used by match_medical_centers.py and the
+# review-assistant methodology). Kept here so the lightweight scoring module is the
+# single source of truth — review_site can import these without pulling in the
+# heavy matching script and its dependencies.
+SIBLING_NAME_THRESHOLD = 0.97   # min name_score for a candidate to anchor sibling detection
+SIBLING_FLAG_THRESHOLD = 0.90   # min name_score for a candidate to be flagged sibling_location
+
 
 def zip_compare(hhl_zip, nppes_zip):
     """

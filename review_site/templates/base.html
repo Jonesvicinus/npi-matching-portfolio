@@ -60,11 +60,15 @@
       --bw-muted:         #6E6E6E;
       --bw-rule:          #D9DCDF;
       --bw-disabled:      #DADADA;
+      --bw-disabled-text: #8B8B8B;
+      --bw-nav-hover-bg:  rgba(255,255,255,0.08);
+      --bw-focus-ring:    rgba(0,139,179,.45);
       --bw-surface:       #F6F7F8;
 
       --bw-error:         #DB0000;
       --bw-error-bg:      #FDECEA;
       --bw-success:       #108043;
+      --bw-success-dark:  #0d6b37;
       --bw-success-bg:    #E8F3E8;
 
       --bw-rule-subtle:    #F3F4F6;
@@ -74,6 +78,12 @@
       --bw-warn-bg:       #FFF0E0;
       --bw-warn-border:   #D97706;
       --bw-purple:        #7C3AED;
+
+      /* Gold — reserved for the rare "National match" badge (unique name,
+         exactly one provider nationwide). Distinct from warn (amber). */
+      --bw-gold:          #7A5A00;
+      --bw-gold-bg:       #FFF8DB;
+      --bw-gold-border:   #E6B800;
 
       --bw-font-head: 'Roboto Slab', ui-serif, Georgia, serif;
       --bw-font-body: 'Montserrat', ui-sans-serif, system-ui, sans-serif;
@@ -106,6 +116,7 @@
     /* ── Base ────────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; }
     html { background: var(--bw-surface); }
+    html { background: var(--bw-surface); }
     body {
       font-family: var(--bw-font-body);
       font-size: 14px;
@@ -113,6 +124,13 @@
       color: var(--bw-ink);
       -webkit-font-smoothing: antialiased;
       background: var(--bw-surface);
+      transition: margin-right .22s ease;
+    }
+    /* When the assistant panel is docked open, push page content inward so the
+       panel never overlaps nav/content. Only on wide screens — on narrow screens
+       the panel overlays (pushing 400px would leave too little room). */
+    @media (min-width: 768px) {
+      body.ra-body-open { margin-right: 400px; }
     }
     h1, h2, h3 {
       font-family: var(--bw-font-head);
@@ -175,7 +193,7 @@
       transition: color 0.15s, border-color 0.15s, background 0.15s;
       min-height: 52px;
     }
-    .bw-nav__link:hover { color: #fff; background: rgba(255,255,255,0.08); }
+    .bw-nav__link:hover { color: #fff; background: var(--bw-nav-hover-bg); }
     .bw-nav__link--active { color: #fff; border-bottom-color: var(--bw-brand); }
     .bw-nav__link:focus-visible { outline: 2px solid var(--bw-brand); outline-offset: -3px; border-radius: var(--bw-r-sm); }
     .bw-nav__brand:focus-visible { outline: 2px solid var(--bw-brand); outline-offset: -3px; border-radius: var(--bw-r-sm); }
@@ -219,11 +237,11 @@
     .bw-btn--approve  { background: transparent; color: var(--bw-success); border: 1.5px solid var(--bw-success); }
     .bw-btn--approve:hover  { background: var(--bw-success-bg); }
     .bw-btn--success  { background: var(--bw-success); color: #fff; }
-    .bw-btn--success:hover  { background: #0d6b37; }
+    .bw-btn--success:hover  { background: var(--bw-success-dark); }
     .bw-btn--nav      { background: transparent; border: 1.5px solid rgba(255,255,255,0.25); color: rgba(255,255,255,0.70); }
-    .bw-btn--nav:hover      { background: rgba(255,255,255,0.08); color: #fff; }
-    .bw-btn--sm       { padding: 10px 14px; font-size: 12px; min-height: 36px; }
-    .bw-btn[disabled] { background: var(--bw-disabled); color: #8B8B8B; border-color: transparent; cursor: not-allowed; }
+    .bw-btn--nav:hover      { background: var(--bw-nav-hover-bg); color: #fff; }
+    .bw-btn--sm       { padding: 11px 16px; font-size: 12px; min-height: 38px; }
+    .bw-btn[disabled] { background: var(--bw-disabled); color: var(--bw-disabled-text); border-color: transparent; cursor: not-allowed; }
     .bw-btn:focus-visible { outline: 2px solid var(--bw-brand); outline-offset: 2px; }
     .bw-btn--confirming {
       background: var(--bw-warn-bg) !important;
@@ -253,10 +271,10 @@
       transition: border-color .15s, box-shadow .15s;
       line-height: 1.4;
     }
-    .bw-input::placeholder { color: #767B7F; }
+    .bw-input::placeholder { color: var(--bw-muted); }
     .bw-input:focus, .bw-select:focus {
       border-color: var(--bw-brand);
-      box-shadow: 0 0 0 3px rgba(0,139,179,.45);
+      box-shadow: 0 0 0 3px var(--bw-focus-ring);
     }
     .bw-select {
       appearance: none;
@@ -315,7 +333,7 @@
     .bw-chip {
       display: inline-flex;
       align-items: center;
-      padding: 7px 12px;
+      padding: 9px 14px;
       border-radius: var(--bw-r-pill);
       border: 1.5px solid var(--bw-rule);
       font-family: var(--bw-font-body);
@@ -332,6 +350,19 @@
     .bw-chip--active { background: var(--bw-brand-600); border-color: var(--bw-brand-600); color: #fff; }
     .bw-chip--active:hover { background: var(--bw-brand-700); border-color: var(--bw-brand-700); color: #fff; }
     .bw-chip:focus-visible { outline: 2px solid var(--bw-brand-600); outline-offset: 2px; }
+
+    /* Single-line filter row (Confidence · Decision · Siblings) — compact chips so
+       all three groups fit one clean, evenly-spaced line without wrapping. */
+    .bw-filter-row {
+      display: flex;
+      flex-wrap: nowrap;
+      align-items: center;
+      justify-content: space-evenly;
+      gap: 8px;
+    }
+    .bw-filter-row > div { flex-shrink: 0; }
+    .bw-filter-row .bw-chip { padding: 7px 11px; }
+    .bw-filter-row .eyebrow { white-space: nowrap; }
 
     /* ── Eyebrow label ───────────────────────────────────── */
     .bw-eyebrow, .eyebrow {
@@ -354,6 +385,43 @@
       font-family: var(--bw-font-mono);
       font-size: 11px;
       font-weight: 400;
+    }
+
+    /* National match — rare, distinctive gold pill with a star (not a check).
+       Only on candidates with a unique name matched to exactly one nationwide
+       NPPES provider registered out of state. */
+    .bw-badge--national {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 9px;
+      background: var(--bw-gold-bg);
+      color: var(--bw-gold);
+      border: 1px solid var(--bw-gold-border);
+      border-radius: 999px;
+      font-family: var(--bw-font-body);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .02em;
+      white-space: nowrap;
+    }
+    .bw-badge--national .bw-badge__star { font-size: 12px; line-height: 1; }
+
+    /* Per-record review reason — plain-English translation of a confidence flag,
+       so reviewers see WHY a match needs a closer look (not just the tier). */
+    .bw-flag-note {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      background: var(--bw-warn-bg);
+      color: var(--bw-warn);
+      border: 1px solid var(--bw-warn-border);
+      border-radius: 6px;
+      font-family: var(--bw-font-body);
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.3;
     }
 
     /* ── Table ───────────────────────────────────────────── */
@@ -514,6 +582,7 @@
       flex-shrink: 0;
     }
     .bw-flash__dismiss:hover { opacity: 1; }
+    .bw-flash__dismiss:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; border-radius: var(--bw-r-sm); opacity: 1; }
     .bw-flash--approved { background: var(--bw-success-bg); color: var(--bw-success); }
     .bw-flash--rejected { background: var(--bw-error-bg);   color: var(--bw-error); }
     .bw-flash--flagged  { background: var(--bw-badge-flagged-bg); color: var(--bw-badge-flagged-text); }
@@ -608,7 +677,7 @@
       color: inherit;
       font: inherit;
       text-decoration: underline;
-      text-decoration-color: var(--bw-rule);
+      text-decoration-color: var(--bw-muted);
       text-underline-offset: 2px;
     }
     .bw-record__name--link:hover {
@@ -645,17 +714,53 @@
     .cmp-row__npp { padding: 9px 12px; font-size: 13px; font-family: var(--bw-font-body); }
     .cmp-row__hhl { border-right: 1px solid var(--bw-rule); }
     .cmp-row--green { background: var(--bw-success-bg); }
-    .cmp-row--green .cmp-row__lbl { background: #f6fef7; }
+    .cmp-row--green .cmp-row__lbl { background: var(--bw-success-bg); }
     .cmp-row--amber { background: var(--bw-warn-bg); }
-    .cmp-row--amber .cmp-row__lbl { background: #fffde7; }
+    .cmp-row--amber .cmp-row__lbl { background: var(--bw-warn-bg); }
     .cmp-row--amber .cmp-row__hhl { border-right-color: var(--bw-warn-border); }
-    @media (max-width: 600px) {
+    @media (max-width: 768px) {
       #review-modal { width: 100vw; max-height: 100dvh; }
       #compare-box   { border-radius: 0 !important; width: 100vw !important; max-height: 100dvh !important; }
       .cmp-row       { grid-template-columns: 1fr; }
       .cmp-row__lbl  { border-right: none; border-bottom: 1px solid var(--bw-rule-subtle); }
       .cmp-row__hhl  { border-right: none; border-bottom: 1px solid var(--bw-rule-subtle); }
     }
+    @media (max-width: 480px) {
+      #main-content { padding-left: 12px !important; padding-right: 12px !important; padding-top: 14px !important; }
+    }
+    .ra-panel {
+      position: fixed; top: 0; right: 0; height: 100vh; width: 400px; max-width: 92vw;
+      background: var(--bw-surface, #fff); border-left: 1px solid var(--bw-rule);
+      box-shadow: -8px 0 24px rgba(0,0,0,0.10); z-index: 1200;
+      display: flex; flex-direction: column;
+      transform: translateX(100%); transition: transform .22s ease;
+    }
+    .ra-panel.ra-open { transform: translateX(0); }
+    .ra-panel.ra-no-anim { transition: none; }
+    .ra-panel__head {
+      display: flex; align-items: center; gap: 8px; padding: 12px 14px;
+      border-bottom: 1px solid var(--bw-rule);
+      font-family: var(--bw-font-head); font-weight: 700; font-size: 14px;
+    }
+    .ra-panel__close { margin-left: auto; background: none; border: none; cursor: pointer; font-size: 18px; color: var(--bw-muted); }
+    .ra-panel__close:focus-visible { outline: 2px solid var(--bw-brand); outline-offset: 2px; }
+    .ra-selector { padding: 12px 14px; border-bottom: 1px solid var(--bw-rule); display: flex; flex-direction: column; gap: 8px; }
+    .ra-selector select, .ra-selector input { width: 100%; }
+    .ra-search-wrap { position: relative; width: 100%; }
+    .ra-search-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); pointer-events: none; }
+    .ra-search-input { padding-left: 36px; }
+    .ra-search-results { list-style: none; margin: 0; padding: 0; max-height: 160px; overflow-y: auto; }
+    .ra-search-results li { padding: 6px 8px; cursor: pointer; font-size: 12px; border-radius: var(--bw-r-sm); }
+    .ra-search-results li:hover, .ra-search-results li:focus { background: var(--bw-tertiary); }
+    .ra-messages { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+    .ra-msg { padding: 9px 12px; border-radius: var(--bw-r-md); font-size: 13px; line-height: 1.5; max-width: 92%; white-space: normal; }
+    .ra-msg--user { align-self: flex-end; background: var(--bw-brand-tint-20); color: var(--bw-brand-700); }
+    .ra-msg--assistant { align-self: flex-start; background: var(--bw-tertiary); color: var(--bw-ink, #1a1a1a); }
+    .ra-msg--loading { font-style: italic; color: var(--bw-muted); }
+    .ra-msg--error { background: var(--bw-error-bg, #fdeaea); color: var(--bw-error); }
+    .ra-input-row { display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--bw-rule); }
+    .ra-input-row input { flex: 1; }
+    @media (max-width: 480px) { .ra-panel { width: 100vw; max-width: 100vw; } }
   </style>
 </head>
 <body style="min-height:100vh;">
@@ -682,7 +787,12 @@
        class="bw-nav__link {% if request.path.startswith('/decisions') %}bw-nav__link--active{% endif %}">
       Decisions
     </a>
+    <a href="/help"
+       class="bw-nav__link {% if request.path.startswith('/help') %}bw-nav__link--active{% endif %}">
+      Help
+    </a>
     <div class="bw-nav__actions">
+      <button type="button" id="ra-toggle" class="bw-btn bw-btn--nav bw-btn--sm" aria-expanded="false" aria-controls="ra-panel" aria-label="Toggle review assistant" title="Review assistant" style="display:inline-flex;align-items:center;justify-content:center;padding:7px 12px;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:block;flex-shrink:0;"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 5V8"/><circle cx="12" cy="3.6" r="1.3"/><path d="M9.5 13h.01M14.5 13h.01"/><path d="M9.5 16.5h5"/><path d="M2.5 12.5v3M21.5 12.5v3"/></svg></button>
       <a href="/export" class="bw-btn bw-btn--primary bw-btn--sm">Export Approved CSV</a>
       <a href="/reload" class="bw-btn bw-btn--nav bw-btn--sm">Reload Data</a>
     </div>
@@ -692,7 +802,8 @@
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
         {% for category, message in messages %}
-          <div class="bw-flash bw-flash--{{ category }}" role="status" aria-live="polite">
+          <div class="bw-flash bw-flash--{{ category }}" role="status" aria-live="polite"
+               onanimationend="this.style.display='none'">
             <span aria-hidden="true">{% if category == 'approved' %}✓{% elif category == 'rejected' %}✕{% elif category == 'flagged' %}⚑{% else %}·{% endif %}</span>
             <span class="bw-flash__body">{{ message }}</span>
             <button type="button" class="bw-flash__dismiss" aria-label="Dismiss" onclick="this.closest('.bw-flash').style.display='none'">×</button>
@@ -703,6 +814,26 @@
     {% block content %}{% endblock %}
   </main>
 
+<aside id="ra-panel" class="ra-panel" aria-label="Review assistant" aria-hidden="true">
+  <div class="ra-panel__head">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:block;flex-shrink:0;color:var(--bw-brand);"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 5V8"/><circle cx="12" cy="3.6" r="1.3"/><path d="M9.5 13h.01M14.5 13h.01"/><path d="M9.5 16.5h5"/><path d="M2.5 12.5v3M21.5 12.5v3"/></svg> Review Assistant
+    <button type="button" class="ra-panel__close" id="ra-close" aria-label="Close assistant">×</button>
+  </div>
+  <div class="ra-selector">
+    <label for="ra-record" class="eyebrow">HHL record</label>
+    <select id="ra-record" class="bw-select" aria-label="Select HHL record"></select>
+    <div class="ra-search-wrap">
+      <svg class="ra-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" style="fill:var(--bw-brand-tint-20);stroke:var(--bw-brand);stroke-width:1.8;"/><path d="M20 20l-4-4" style="stroke:var(--bw-brand-700);stroke-width:2;" stroke-linecap="round"/></svg>
+      <input type="text" id="ra-search" class="bw-input ra-search-input" placeholder="Search other records…" aria-label="Search HHL records">
+    </div>
+    <ul id="ra-search-results" class="ra-search-results" hidden></ul>
+  </div>
+  <div class="ra-messages" id="ra-messages" aria-live="polite"></div>
+  <div class="ra-input-row">
+    <input type="text" id="ra-input" class="bw-input" placeholder="Ask about these candidates…" aria-label="Ask the review assistant" disabled>
+    <button type="button" id="ra-send" class="bw-btn bw-btn--primary bw-btn--sm" disabled>→</button>
+  </div>
+</aside>
 <dialog id="review-modal" aria-modal="true"></dialog>
 <script>
 (function () {
@@ -717,7 +848,7 @@
   }
 
   function _dash() {
-    return '<span style="color:var(--bw-muted);font-style:italic;font-size:11px;">—</span>';
+    return '<span aria-hidden="true" style="color:var(--bw-muted);font-style:italic;font-size:11px;">—</span>';
   }
 
   function _row(label, hhlVal, nppesVal, state) {
@@ -895,6 +1026,7 @@
       + '<div style="overflow-y:auto;">' + rows + '</div>'
       + '</div>';
 
+    dlg.setAttribute('aria-labelledby', 'compare-title');
     dlg.querySelector('.compare-close')
       .addEventListener('click', function () { dlg.close(); });
     dlg.showModal();
@@ -936,7 +1068,7 @@
       + 'display:flex;align-items:flex-start;justify-content:space-between;gap:12px;'
       + 'flex-shrink:0;background:var(--bw-surface);">'
       + '<div>'
-      + '<div style="font-family:var(--bw-font-head);font-weight:700;font-size:14px;'
+      + '<div id="modal-heading" style="font-family:var(--bw-font-head);font-weight:700;font-size:14px;'
       + 'color:var(--bw-secondary);">' + _esc(title) + '</div>'
       + (subtitle ? '<div style="font-size:11px;color:var(--bw-muted);margin-top:2px;">' + _esc(subtitle) + '</div>' : '')
       + '</div>'
@@ -975,6 +1107,7 @@
     }
     if (!rows) rows = '<p style="padding:20px;color:var(--bw-muted);font-size:13px;">No HHL data on file.</p>';
     dlg.innerHTML = _modalShell('HHL Profile', data.hhlName, null, rows);
+    dlg.setAttribute('aria-labelledby', 'modal-heading');
     dlg.showModal();
     _attachModalClose();
   };
@@ -1063,6 +1196,7 @@
 
     if (_nppes_cache[npi]) {
       dlg.innerHTML = _renderNppes(_nppes_cache[npi]);
+      dlg.setAttribute('aria-labelledby', 'modal-heading');
       dlg.showModal();
       _attachModalClose();
       return;
@@ -1070,6 +1204,7 @@
 
     dlg.innerHTML = _modalShell('NPPES Profile', 'NPI ' + _esc(String(npi)), null,
       '<div id="nppes-status" style="padding:32px 20px;text-align:center;color:var(--bw-muted);font-size:13px;">Loading…</div>');
+    dlg.setAttribute('aria-labelledby', 'modal-heading');
     dlg.showModal();
     _attachModalClose();
 
@@ -1081,12 +1216,14 @@
       .then(function (data) {
         _nppes_cache[npi] = data;
         dlg.innerHTML = _renderNppes(data);
+        dlg.setAttribute('aria-labelledby', 'modal-heading');
         _attachModalClose();
       })
       .catch(function (err) {
+        if (err.message !== 'not_found') console.error('NPPES fetch error:', err);
         var msg = err.message === 'not_found'
-          ? 'Provider not found in local database. Run <code>build_local_db.py</code> to rebuild.'
-          : 'Failed to load NPPES data. Check that the server is running.';
+          ? 'This provider\'s NPPES data is unavailable. Contact your NPI Review administrator.'
+          : 'NPPES data couldn\'t be loaded. Contact your NPI Review administrator if this continues.';
         var el = document.getElementById('nppes-status');
         if (el) el.innerHTML = msg + ' <button class="bw-btn bw-btn--ghost bw-btn--sm" '
           + 'style="margin-left:8px;" onclick="openNppes(' + _esc(JSON.stringify(npi)) + ')">Try again</button>';
@@ -1094,6 +1231,285 @@
   };
 
 }());
+
+document.querySelectorAll('.bw-tip[tabindex]').forEach(function(el) {
+  if (!el.getAttribute('role')) el.setAttribute('role', 'button');
+});
+</script>
+<script>
+(function () {
+  var CHAT_API_URL = "{{ chat_api_url }}";
+  var panel    = document.getElementById('ra-panel');
+  var toggle   = document.getElementById('ra-toggle');
+  var closeBtn = document.getElementById('ra-close');
+  var msgsEl   = document.getElementById('ra-messages');
+  var inputEl  = document.getElementById('ra-input');
+  var sendEl   = document.getElementById('ra-send');
+  var selectEl = document.getElementById('ra-record');
+  var searchEl = document.getElementById('ra-search');
+  var resultsEl= document.getElementById('ra-search-results');
+
+  if (!panel || !toggle) return;   // panel markup not present on this page
+
+  var currentKey = null;       // "<type>:<id>"
+  var currentContext = null;   // { methodology, hhl_record, candidates }
+  var loading = false;
+
+  // ---- chat-server discovery ------------------------------------------------
+  // In production CHAT_API_URL is a fixed remote origin → use it directly.
+  // In local dev the chat server auto-falls back to the next free port if its
+  // default is taken, so we probe a small range of localhost ports and pick the
+  // one whose /health returns OUR signature ({status:"ok"}). Cached after first
+  // success; re-probed only if a later request fails (server moved/restarted).
+  var chatBase = null;
+  var IS_LOCAL = /localhost|127\.0\.0\.1/.test(CHAT_API_URL);
+  var START_PORT = parseInt((CHAT_API_URL.match(/:(\d+)/) || [])[1] || '3001', 10);
+
+  async function probeHealth(url) {
+    try {
+      var r = await fetch(url + '/health', { method: 'GET' });
+      if (!r.ok) return false;
+      var j = await r.json();
+      return j && j.status === 'ok';
+    } catch (e) { return false; }
+  }
+
+  async function resolveChatBase() {
+    if (chatBase) return chatBase;
+    if (!IS_LOCAL) { chatBase = CHAT_API_URL; return chatBase; }
+    for (var p = START_PORT; p < START_PORT + 10; p++) {
+      var url = 'http://localhost:' + p;
+      if (await probeHealth(url)) { chatBase = url; return chatBase; }
+    }
+    throw new Error('chat-server-not-found');
+  }
+
+  // ---- localStorage threads -------------------------------------------------
+  function threadKey(key) { return 'ra-thread:' + key; }
+  function loadThread(key) {
+    try { return JSON.parse(localStorage.getItem(threadKey(key))) || []; }
+    catch (e) { return []; }
+  }
+  function saveThread(key, messages) {
+    try { localStorage.setItem(threadKey(key), JSON.stringify(messages)); }
+    catch (e) { /* storage full/unavailable — degrade to in-memory only */ }
+  }
+
+  // ---- markdown (ported from ProviderLookupChat.jsx) ------------------------
+  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function renderMarkdown(text) {
+    if (!text) return '';
+    return text.split('\n').map(function (line) {
+      var out = '', last = 0, m;
+      var re = /\[(\*\*[^*]+\*\*|[^\]]+)\]\(([^)]+)\)|\*\*([^*\n]+)\*\*/g;
+      while ((m = re.exec(line)) !== null) {
+        out += esc(line.slice(last, m.index));
+        if (m[2]) {
+          var label = m[1].replace(/\*\*/g, '');
+          var bold = m[1].indexOf('**') === 0;
+          out += '<a href="' + esc(m[2]) + '" target="_blank" rel="noopener noreferrer">'
+               + (bold ? '<strong>' + esc(label) + '</strong>' : esc(label)) + '</a>';
+        } else {
+          out += '<strong>' + esc(m[3]) + '</strong>';
+        }
+        last = re.lastIndex;
+      }
+      out += esc(line.slice(last));
+      return out;
+    }).join('<br>');
+  }
+
+  // ---- rendering ------------------------------------------------------------
+  function renderMessages(messages) {
+    msgsEl.innerHTML = '';
+    messages.forEach(function (msg) {
+      var div = document.createElement('div');
+      div.className = 'ra-msg ra-msg--' + (msg.role === 'user' ? 'user' : 'assistant');
+      if (msg.role === 'assistant') div.innerHTML = renderMarkdown(msg.content);
+      else div.textContent = msg.content;
+      msgsEl.appendChild(div);
+    });
+    msgsEl.scrollTop = msgsEl.scrollHeight;
+  }
+
+  // ---- toggle ---------------------------------------------------------------
+  function openPanel()  { panel.classList.add('ra-open'); document.body.classList.add('ra-body-open'); panel.setAttribute('aria-hidden','false'); toggle.setAttribute('aria-expanded','true'); try { localStorage.setItem('ra-panel-open','1'); } catch (e) {} resolveChatBase().catch(function(){}); }
+  function closePanel() { panel.classList.remove('ra-open'); document.body.classList.remove('ra-body-open'); panel.setAttribute('aria-hidden','true'); toggle.setAttribute('aria-expanded','false'); try { localStorage.setItem('ra-panel-open','0'); } catch (e) {} }
+  toggle.addEventListener('click', function () {
+    if (panel.classList.contains('ra-open')) closePanel(); else openPanel();
+  });
+  closeBtn.addEventListener('click', closePanel);
+
+  // ---- context + opener -----------------------------------------------------
+  function staticOpener(ctx) {
+    var rec = ctx.hhl_record || {};
+    var n = (ctx.candidates || []).length;
+    return { role: 'assistant', content:
+      'Loaded **' + (rec.hhl_name || 'this record') + '**'
+      + (rec.hhl_state ? ' (' + rec.hhl_state + ')' : '')
+      + ' and its ' + n + ' candidate' + (n === 1 ? '' : 's') + '. Ask me anything — '
+      + 'why a candidate scored the way it did, whether there are sibling locations, '
+      + 'a breakdown of the top 3, and more.' };
+  }
+
+  function selectRecord(type, id, label) {
+    var key = type + ':' + id;
+    fetch('/api/record-context/' + encodeURIComponent(type) + '/' + encodeURIComponent(id))
+      .then(function (r) { if (!r.ok) throw new Error('not_found'); return r.json(); })
+      .then(function (ctx) {
+        currentKey = key;
+        currentContext = ctx;
+        var thread = loadThread(key);
+        if (thread.length === 0) { thread = [staticOpener(ctx)]; saveThread(key, thread); }
+        renderMessages(thread);
+        inputEl.disabled = false; sendEl.disabled = false;
+        if (label && !Array.prototype.some.call(selectEl.options, function (o) { return o.value === key; })) {
+          var opt = document.createElement('option'); opt.value = key; opt.textContent = label; selectEl.appendChild(opt);
+        }
+        selectEl.value = key;
+        // Remember the open record so a filter/page change keeps your place.
+        try {
+          localStorage.setItem('ra-last-key', key);
+          var lbl = label || (selectEl.options[selectEl.selectedIndex] && selectEl.options[selectEl.selectedIndex].textContent) || '';
+          if (lbl) localStorage.setItem('ra-last-label', lbl);
+        } catch (e) {}
+      })
+      .catch(function () {
+        msgsEl.innerHTML = '<div class="ra-msg ra-msg--error">Could not load that record. Try another.</div>';
+        inputEl.disabled = true; sendEl.disabled = true;
+      });
+  }
+
+  // ---- populate selector from the current page's visible records ------------
+  function initFromPage() {
+    var data = window.RA_PAGE_RECORDS || [];
+    selectEl.innerHTML = '';
+    data.forEach(function (rec) {
+      var key = rec.type + ':' + rec.id;
+      var opt = document.createElement('option');
+      opt.value = key; opt.textContent = rec.name + (rec.state ? ' (' + rec.state + ')' : '');
+      selectEl.appendChild(opt);
+    });
+    // Restore the record open before a filter/page change so the assistant keeps
+    // your place; fall back to the first record on the page, then the empty prompt.
+    var lastKey = null, lastLabel = '';
+    try { lastKey = localStorage.getItem('ra-last-key'); lastLabel = localStorage.getItem('ra-last-label') || ''; } catch (e) {}
+    // Decide which record to load:
+    //  - if the remembered record is among this page's records, restore it;
+    //  - else, on a single-type page (Centers OR Professionals) still restore it
+    //    when it's that same type, so changing filters keeps your place even if the
+    //    record is filtered out of view;
+    //  - otherwise (switching tabs, or the mixed Decisions page) fall back to the
+    //    first record on this page. This prevents the assistant getting stuck on a
+    //    record from another tab.
+    var types = {};
+    data.forEach(function (rec) { types[rec.type] = true; });
+    var typeList = Object.keys(types);
+    var lastType = lastKey ? lastKey.split(':')[0] : null;
+    var inPage = lastKey && data.some(function (rec) { return rec.type + ':' + rec.id === lastKey; });
+    var singleTypeMatch = lastKey && typeList.length === 1 && typeList[0] === lastType;
+    if (lastKey && (inPage || singleTypeMatch)) {
+      var p = lastKey.split(':');
+      selectRecord(p[0], p.slice(1).join(':'), lastLabel);
+    } else if (data.length > 0) {
+      selectRecord(data[0].type, data[0].id, null);
+    } else {
+      msgsEl.innerHTML = '<div class="ra-msg ra-msg--assistant">Search for an HHL record above to begin.</div>';
+    }
+  }
+
+  selectEl.addEventListener('change', function () {
+    var parts = selectEl.value.split(':');
+    selectRecord(parts[0], parts.slice(1).join(':'), selectEl.options[selectEl.selectedIndex].textContent);
+  });
+
+  // ---- search (typeahead across all ~12k records) ---------------------------
+  var searchTimer = null;
+  searchEl.addEventListener('input', function () {
+    var q = searchEl.value.trim();
+    clearTimeout(searchTimer);
+    if (q.length < 2) { resultsEl.hidden = true; resultsEl.innerHTML = ''; return; }
+    searchTimer = setTimeout(function () {
+      fetch('/api/hhl-records?q=' + encodeURIComponent(q))
+        .then(function (r) { return r.json(); })
+        .then(function (rows) {
+          resultsEl.innerHTML = '';
+          rows.forEach(function (rec) {
+            var li = document.createElement('li');
+            li.tabIndex = 0;
+            li.textContent = rec.name + ' · ' + rec.type + (rec.state ? ' · ' + rec.state : '');
+            function pick() { selectRecord(rec.type, rec.id, rec.name + (rec.state ? ' (' + rec.state + ')' : '')); resultsEl.hidden = true; searchEl.value = ''; }
+            li.addEventListener('click', pick);
+            li.addEventListener('keydown', function (e) { if (e.key === 'Enter') pick(); });
+            resultsEl.appendChild(li);
+          });
+          resultsEl.hidden = rows.length === 0;
+        });
+    }, 200);
+  });
+
+  // ---- send a message -------------------------------------------------------
+  function showError(thread, text) {
+    renderMessages(thread);
+    var err = document.createElement('div');
+    err.className = 'ra-msg ra-msg--error';
+    err.textContent = text;
+    msgsEl.appendChild(err);
+    msgsEl.scrollTop = msgsEl.scrollHeight;
+  }
+
+  async function send() {
+    var text = inputEl.value.trim();
+    if (!text || loading || !currentContext) return;
+    var thread = loadThread(currentKey);
+    thread.push({ role: 'user', content: text });
+    renderMessages(thread);
+    saveThread(currentKey, thread);
+    inputEl.value = '';
+    loading = true; inputEl.disabled = true; sendEl.disabled = true;
+
+    var loadingEl = document.createElement('div');
+    loadingEl.className = 'ra-msg ra-msg--assistant ra-msg--loading';
+    loadingEl.textContent = 'Thinking…';
+    msgsEl.appendChild(loadingEl); msgsEl.scrollTop = msgsEl.scrollHeight;
+
+    try {
+      var base = await resolveChatBase();
+      var r = await fetch(base + '/api/review-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: thread, context: currentContext })
+      });
+      if (!r.ok) throw new Error('api');
+      var reply = await r.json();
+      thread.push(reply); saveThread(currentKey, thread); renderMessages(thread);
+    } catch (e) {
+      chatBase = null;   // drop cached base so the next send re-discovers (server may have moved/restarted)
+      if (e && e.message === 'chat-server-not-found') {
+        showError(thread, "Can't reach the review assistant server. Start it with:  cd npi-chat-server && npm run dev");
+      } else {
+        showError(thread, 'Something went wrong, please try again.');
+      }
+    } finally {
+      loading = false; inputEl.disabled = false; sendEl.disabled = false; inputEl.focus();
+    }
+  }
+  sendEl.addEventListener('click', send);
+  inputEl.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); send(); } });
+
+  initFromPage();
+
+  // Keep the assistant open across filter/page changes (it was closing on every
+  // reload because open state was client-side only). Suppress the slide-in on
+  // restore so it feels like it simply stayed open.
+  try {
+    if (localStorage.getItem('ra-panel-open') === '1') {
+      panel.classList.add('ra-no-anim');
+      openPanel();
+      requestAnimationFrame(function () { requestAnimationFrame(function () { panel.classList.remove('ra-no-anim'); }); });
+    }
+  } catch (e) {}
+})();
 </script>
 
 </body>

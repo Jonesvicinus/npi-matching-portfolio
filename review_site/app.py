@@ -14,6 +14,7 @@ import csv
 import io
 import os
 import sqlite3
+import sys
 from datetime import datetime, timezone
 
 from flask import Flask, flash, get_flashed_messages, jsonify, redirect, render_template, request, url_for, Response
@@ -31,8 +32,16 @@ _PROF_CSV_P2   = os.path.join(DATA_DIR, "medical_professional_matches_phase2.csv
 _PROF_CSV_P1   = os.path.join(DATA_DIR, "medical_professional_matches.csv")
 PROF_CSV       = _PROF_CSV_P2 if os.path.exists(_PROF_CSV_P2) else _PROF_CSV_P1
 
+sys.path.insert(0, os.path.join(BASE_DIR, "pipeline"))
+from review_assistant import build_methodology
+
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "npi-review-dev-only")
+
+
+@app.context_processor
+def inject_chat_api_url():
+    return {"chat_api_url": os.environ.get("REVIEW_CHAT_API_URL", "http://localhost:3001")}
 
 
 def _safe_int(value, default, allowed=None):
@@ -501,6 +510,11 @@ def get_progress(groups, decisions, hhl_type, manual_multi=None):
 def index():
     stats = build_stats()
     return render_template("index.html", stats=stats)
+
+
+@app.route("/help")
+def help_page():
+    return render_template("help.html")
 
 
 CONF_ORDER = {"HIGH": 0, "MEDIUM": 1, "LOW": 2, "NO_MATCH": 3, "NO_STATE": 4, "SKIPPED": 5}
@@ -973,6 +987,57 @@ def api_provider(npi):
     if not data:
         return jsonify({"error": "not found"}), 404
     return jsonify(data)
+
+
+@app.route("/api/record-context/<hhl_type>/<hhl_id>")
+def api_record_context(hhl_type, hhl_id):
+    if hhl_type == "center":
+        records = get_centers()
+    elif hhl_type == "professional":
+        records = get_professionals()
+    else:
+        return jsonify({"error": "record not found"}), 404
+
+    group = records.get(hhl_id)
+    if not group:
+        return jsonify({"error": "record not found"}), 404
+
+    return jsonify({
+        "methodology": build_methodology(),
+        "hhl_record":  group["meta"],
+        "candidates":  group["candidates"],
+    })
+
+
+@app.route("/api/hhl-records")
+def api_hhl_records():
+    q = request.args.get("q", "").strip().lower()
+    type_filter = request.args.get("type", "").strip()
+    if not q:
+        return jsonify([])
+
+    sources = []
+    if type_filter in ("", "center"):
+        sources.append(("center", get_centers()))
+    if type_filter in ("", "professional"):
+        sources.append(("professional", get_professionals()))
+
+    out = []
+    for type_name, records in sources:
+        for hhl_id, group in records.items():
+            meta = group["meta"]
+            name = meta.get("hhl_name", "")
+            if q in name.lower():
+                out.append({
+                    "id":    hhl_id,
+                    "name":  name,
+                    "type":  type_name,
+                    "state": meta.get("hhl_state", ""),
+                })
+                if len(out) >= 50:   # cap typeahead payload
+                    return jsonify(out)
+    return jsonify(out)
+
 
 @app.route("/provider/<npi>")
 def provider(npi):

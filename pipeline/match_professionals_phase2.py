@@ -50,6 +50,22 @@ OUTPUT_CSV     = os.path.join(DATA_DIR, "medical_professional_matches_phase2.csv
 WORKERS = 12
 TOP_N   = 5
 
+# National name-anchored fallback thresholds.
+# A provider's NPPES practice_state often isn't where HHL lists them (relocations,
+# multi-state systems like CommonSpirit, providers on a state border). The single-
+# state search misses them entirely. When no strong same-name candidate turns up
+# in-state, we search the full registry by surname and inject only strong same-name
+# matches — surfacing the real person without adding same-surname noise.
+# Thresholds are on the combined name score (last*0.6 + first*0.4). Because every
+# candidate already shares the surname, that 0.6 floor means a merely similar first
+# name still scores ~0.85 — so the gates sit higher, keyed to first-name strength:
+#   trigger 0.92  ⇒ fire only when no in-state candidate's first name is strong
+#                   (for an exact surname, first-name similarity < 0.80)
+#   merge   0.95  ⇒ inject only strong same-name national matches
+#                   (first-name similarity >= ~0.875), never same-surname noise
+NATIONAL_TRIGGER_THRESHOLD = 0.92   # run national search when best in-state name < this
+NATIONAL_MERGE_THRESHOLD   = 0.95   # only merge national candidates with name_score >= this
+
 STATE_ABBR = {
     "Alabama": "AL", "Alaska": "AK", "Arizona": "AZ", "Arkansas": "AR",
     "California": "CA", "Colorado": "CO", "Connecticut": "CT", "Delaware": "DE",
@@ -252,6 +268,47 @@ def get_state_individuals(state_abbr):
         return _state_cache[state_abbr]
 
 
+# ---------------------------------------------------------------------------
+# National surname cache (full registry, all states) — for the name-anchored
+# fallback. Keyed by normalized surname; the result set for one surname is small
+# and the query is backed by idx_providers_lastname.
+# ---------------------------------------------------------------------------
+
+_national_cache      = {}
+_national_cache_lock = threading.Lock()
+
+
+def get_individuals_by_last_name_national(last_name):
+    """All active individual providers nationwide with this exact (normalized) surname.
+
+    First-name similarity + credential/taxonomy disambiguate within the result;
+    exact surname keeps the set small and the query index-backed.
+    """
+    key = (last_name or "").strip().upper()
+    if not key:
+        return [], []
+    with _national_cache_lock:
+        if key in _national_cache:
+            return _national_cache[key]
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        rows = [dict(r) for r in conn.execute("""
+            SELECT p.npi, p.first_name, p.last_name, p.credential,
+                   p.practice_address1, p.practice_city, p.practice_state,
+                   p.practice_zip, p.practice_phone,
+                   t.taxonomy_code
+            FROM providers p
+            LEFT JOIN taxonomies t ON t.npi = p.npi AND t.is_primary = 1
+            WHERE p.entity_type = 1
+              AND p.last_name = ?
+              AND p.deactivation_date IS NULL
+        """, (key,)).fetchall()]
+        conn.close()
+        last_names = [(r["last_name"] or "").lower() for r in rows]
+        _national_cache[key] = (rows, last_names)
+        return rows, last_names
+
+
 # Email domain → center_id mapping (built in main())
 _domain_center_map = {}
 
@@ -330,6 +387,29 @@ def rank_candidates(all_rows, all_last_names, last_name, name_expansions, prefix
         score = score_individual(row, last_name, name_expansions)
         scored.append((score, row))
 
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return scored[:TOP_N]
+
+
+def rank_national_candidates(rows, last_name, name_expansions):
+    """Rank exact-surname national rows by first name — the only discriminating axis.
+
+    rank_candidates() pre-filters by surname with a 200-row cutoff, which is wrong
+    here: every national row already shares the surname, so that cutoff would drop
+    the true first-name match (e.g. the one Shundrika Scott among 9k Scotts) before
+    it is ever scored. Here we score every row by first-name similarity and keep the
+    best TOP_N.
+    """
+    scored = []
+    for row in rows:
+        best_first = max(
+            (fuzz.token_sort_ratio(exp.lower(), (row["first_name"] or "").lower()) / 100.0
+             for exp in name_expansions),
+            default=0.0,
+        )
+        if best_first < 0.40:
+            continue
+        scored.append((score_individual(row, last_name, name_expansions), row))
     scored.sort(key=lambda x: x[0], reverse=True)
     return scored[:TOP_N]
 
@@ -447,6 +527,34 @@ def process_professional(args):
             top = state_top
             anchor_city = center_city
 
+    # --- National name-anchored fallback ---
+    # If no strong same-name candidate turned up in-state/at-anchor, search the
+    # full registry by surname to catch providers registered in another state.
+    # Only strong same-name national matches (>= NATIONAL_MERGE_THRESHOLD) are
+    # injected, so we surface the real person without adding same-surname noise.
+    national_npis = set()
+    best_name = top[0][0] if top else 0.0
+    if best_name < NATIONAL_TRIGGER_THRESHOLD:
+        nat_rows, _nat_last = get_individuals_by_last_name_national(last_name)
+        if nat_rows:
+            nat_top = rank_national_candidates(nat_rows, last_name, name_expansions)
+            strong  = [(s, row) for s, row in nat_top if s >= NATIONAL_MERGE_THRESHOLD]
+            # Only trust a national match when it is nationally UNAMBIGUOUS — exactly
+            # one strong same-name provider. Common names ("Nancy Arnold") have many
+            # namesakes across states that cannot be told apart by name, so surfacing
+            # one as a confident match would be a guess. Distinctive names (the lone
+            # "Shundrika Scott") have exactly one and are the real win.
+            if len(strong) == 1:
+                seen = {row["npi"] for _, row in top}
+                if strong[0][1]["npi"] not in seen:
+                    national_npis = {strong[0][1]["npi"]}
+                    merged = top + strong
+                    merged.sort(key=lambda x: x[0], reverse=True)
+                    top = merged[:TOP_N]
+                    # A national candidate may be trimmed out by TOP_N — keep only
+                    # those that survived into the final set.
+                    national_npis &= {row["npi"] for _, row in top}
+
     if not top:
         return [{**base, "rank": "", "confidence": "NO_MATCH", "match_score": "",
                  "signals_matched": "",
@@ -468,7 +576,7 @@ def process_professional(args):
         tax_match   = taxonomy_matches(row, prefixes)
         phone_match, phone_score = compute_phone_match(hhl_phone, row.get("practice_phone", ""))
 
-        if anchored and anchor_type == "approved":
+        if anchored and anchor_type == "approved" and row["npi"] not in national_npis:
             city_val      = 1.0
             city_conflict = False   # anchor_approved bypasses conflict
         else:
@@ -527,11 +635,17 @@ def process_professional(args):
         c0["final_signals"]      = fs
         c0["final_field_scores"] = ffs
 
-    # Append anchor signal to every candidate's final_signals AFTER composite finalized
+    # Append anchor signal to every candidate's final_signals AFTER composite finalized.
+    # National-sourced candidates are out-of-area, so they never inherit the anchor
+    # signal — they carry "national" instead.
     if anchored:
         anchor_signal = "anchor_approved" if anchor_type == "approved" else "anchor_inferred"
         for c in intermediate:
-            c["final_signals"] = c["final_signals"] + [anchor_signal]
+            if c["row"]["npi"] not in national_npis:
+                c["final_signals"] = c["final_signals"] + [anchor_signal]
+    for c in intermediate:
+        if c["row"]["npi"] in national_npis:
+            c["final_signals"] = c["final_signals"] + ["national"]
 
     # --- Pass 2: build output rows ---
     out_rows = []
@@ -542,6 +656,15 @@ def process_professional(args):
             c["final_composite"], c["city_conflict"], margin,
             name_score=ffs["name"],
         )
+        # A national (out-of-state) pick has no city to verify against, so when
+        # neither credential nor taxonomy corroborates it the name is the ONLY
+        # evidence — not enough for HIGH (a coincidental namesake could be approved).
+        # Cap such picks at MEDIUM and flag why. Corroborated national picks (e.g.
+        # Shundrika Scott: LCSW + social-worker taxonomy) keep their tier.
+        if (c["row"]["npi"] in national_npis and confidence == "HIGH"
+                and not (c["cred_match"] or c["tax_match"])):
+            confidence = "MEDIUM"
+            conf_flags = conf_flags + ["national_name_only"]
         out_rows.append({
             **base,
             "rank":                rank,
@@ -583,6 +706,16 @@ def main():
     if not os.path.exists(CENTER_MATCHES):
         print(f"ERROR: {CENTER_MATCHES} not found. Run: python3 match_medical_centers.py")
         return
+
+    # Ensure the surname index exists — the national fallback's per-surname query
+    # is a full table scan (~0.6s) without it, but ~10ms with it. Idempotent;
+    # build_local_db.py also creates it, this covers DBs built before that change.
+    print("Ensuring surname index for national fallback...")
+    _conn = sqlite3.connect(DB_PATH)
+    _conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_providers_lastname ON providers (last_name, entity_type)"
+    )
+    _conn.close()
 
     print("Loading center confirmations...")
     load_center_confirmations()

@@ -27,6 +27,7 @@ from rapidfuzz import fuzz, process as fuzz_process
 from scoring import (
     center_composite, zip_compare,
     assess_candidate_strength, assess_selection_confidence,
+    SIBLING_NAME_THRESHOLD, SIBLING_FLAG_THRESHOLD,
 )
 
 BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -505,12 +506,12 @@ def process_center(center):
     # Sibling-location detection: two+ candidates with name_score >= 0.90 but
     # different NPPES cities — same org at multiple locations.
     sibling_count = 0
-    high_name = [r for r in out_rows if r.get("name_score") and float(r["name_score"]) >= 0.97]
+    high_name = [r for r in out_rows if r.get("name_score") and float(r["name_score"]) >= SIBLING_NAME_THRESHOLD]
     if len(high_name) >= 2:
         sibling_cities = {r["nppes_city"].strip().upper() for r in high_name if r.get("nppes_city")}
         if len(sibling_cities) > 1:
             for r in out_rows:
-                if r.get("name_score") and float(r["name_score"]) >= 0.90:
+                if r.get("name_score") and float(r["name_score"]) >= SIBLING_FLAG_THRESHOLD:
                     existing = r.get("confidence_flags", "")
                     r["confidence_flags"] = (existing + "|sibling_location").lstrip("|") if existing else "sibling_location"
             sibling_count = sum(1 for r in out_rows if "sibling_location" in r.get("confidence_flags", ""))

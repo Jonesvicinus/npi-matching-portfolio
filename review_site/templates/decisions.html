@@ -106,6 +106,7 @@
 
 </div>
 
+<h2 class="sr-only">Decision records</h2>
 {% if not rows %}
   <div class="bw-card" style="padding:48px;text-align:center;">
     {% if search or filter_state != 'all' or filter_type != 'all' %}
@@ -331,6 +332,13 @@
   }
   .bw-expand-grid__section { padding: 16px 20px; min-width: 0; }
   .bw-expand-grid__section + .bw-expand-grid__section { border-left: 1px solid var(--bw-rule); }
+  @media (max-width: 900px) {
+    .bw-expand-grid { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 600px) {
+    .bw-expand-grid { grid-template-columns: 1fr; }
+    .bw-expand-grid__section + .bw-expand-grid__section { border-left: none; border-top: 1px solid var(--bw-rule); }
+  }
 </style>
 
 <script>
@@ -638,13 +646,39 @@
     if (form && ppSel) {
       form.addEventListener('submit', function (e) {
         if (ppSel.value === '999999' && pageTotal > 300) {
-          if (!confirm('Load all ' + pageTotal + ' records? This may slow your browser.')) {
+          const applyBtn = form.querySelector('button[type="submit"]');
+          if (!applyBtn.dataset.confirming) {
             e.preventDefault();
+            applyBtn.dataset.confirming = '1';
+            applyBtn._origText  = applyBtn.textContent;
+            applyBtn._origClass = applyBtn.className;
+            applyBtn.classList.add('bw-btn--confirming');
+            applyBtn.classList.remove('bw-btn--primary');
+            applyBtn.textContent = 'Load all ' + pageTotal + '?';
+            applyBtn._timer = setTimeout(function () {
+              delete applyBtn.dataset.confirming;
+              applyBtn.className  = applyBtn._origClass;
+              applyBtn.textContent = applyBtn._origText;
+            }, 3000);
+          } else {
+            clearTimeout(applyBtn._timer);
+            delete applyBtn.dataset.confirming;
           }
         }
       });
     }
   }());
+</script>
+
+<script>
+  // Let the review assistant auto-load the decided records on this page so it can
+  // be used to revisit/audit decisions. Type is per-row (Decisions mixes centers
+  // and professionals).
+  window.RA_PAGE_RECORDS = [
+    {% for r in rows %}
+      { id: {{ r.hhl_id|tojson }}, name: {{ r.name|tojson }}, type: {{ r.hhl_type|tojson }}, state: {{ (r.hhl_state or "")|tojson }} }{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ];
 </script>
 
 {% endblock %}

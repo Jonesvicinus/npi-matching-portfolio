@@ -39,15 +39,39 @@
 </style>
 
 {% macro conf_badge(conf) %}
-  {% if conf == "HIGH" %}<span class="bw-badge bw-badge--high">HIGH</span>
-  {% elif conf == "MEDIUM" %}<span class="bw-badge bw-badge--medium">MEDIUM</span>
-  {% elif conf == "LOW" %}<span class="bw-badge bw-badge--low">LOW</span>
+  {% if conf == "HIGH" %}<span class="bw-tip bw-badge bw-badge--high" tabindex="0">HIGH<span role="tooltip" class="bw-tip__body"><strong>Confidence level: High</strong><br>Name and all key details matched. Likely correct.</span></span>
+  {% elif conf == "MEDIUM" %}<span class="bw-tip bw-badge bw-badge--medium" tabindex="0">MEDIUM<span role="tooltip" class="bw-tip__body"><strong>Confidence level: Medium</strong><br>Not fully confirmed — check the details before approving.</span></span>
+  {% elif conf == "LOW" %}<span class="bw-tip bw-badge bw-badge--low" tabindex="0">LOW<span role="tooltip" class="bw-tip__body"><strong>Confidence level: Low</strong><br>Weak match — usually not the right provider.</span></span>
   {% else %}<span class="bw-badge bw-badge--gray">{{ conf }}</span>{% endif %}
 {% endmacro %}
 
 {% macro strength_badge(strength) %}
-  {% if strength in ["STRONG", "MODERATE", "WEAK"] %}
-  <span class="bw-tip bw-badge bw-badge--strength-{{ strength | lower }}" tabindex="0">{{ strength }}<span role="tooltip" class="bw-tip__body">Candidate strength: how well-supported this match is. STRONG = multiple high-quality signals (name, address, phone). MODERATE = partial signals matched. WEAK = limited or marginal evidence.</span></span>
+  {% if strength == "STRONG" %}<span class="bw-tip bw-badge bw-badge--strength-strong" tabindex="0">STRONG<span role="tooltip" class="bw-tip__body"><strong>Candidate strength: Strong</strong><br>Backed by several fields.</span></span>
+  {% elif strength == "MODERATE" %}<span class="bw-tip bw-badge bw-badge--strength-moderate" tabindex="0">MODERATE<span role="tooltip" class="bw-tip__body"><strong>Candidate strength: Moderate</strong><br>Backed by a few fields.</span></span>
+  {% elif strength == "WEAK" %}<span class="bw-tip bw-badge bw-badge--strength-weak" tabindex="0">WEAK<span role="tooltip" class="bw-tip__body"><strong>Candidate strength: Weak</strong><br>Little beyond a partial name.</span></span>
+  {% endif %}
+{% endmacro %}
+
+{# National match: rendered only when the candidate carries the `national`
+   signal — a unique name matched to exactly one provider nationwide, registered
+   out of state. Gold star, deliberately rare. #}
+{% macro national_badge(signals) %}
+  {% if signals and 'national' in signals.split('|') %}
+  <span class="bw-tip bw-badge--national" tabindex="0"><span class="bw-badge__star" aria-hidden="true">★</span> National match<span role="tooltip" class="bw-tip__body">Found by a nationwide search: this name matches exactly one provider in the entire NPPES registry, registered in a different state than the HHL record. Rare and distinctive — confirm the state is plausible for this person.</span></span>
+  {% endif %}
+{% endmacro %}
+
+{# Plain-English reason this candidate needs a closer look, from confidence_flags.
+   Shown visibly (not hidden in a hover) so the reviewer sees exactly why. #}
+{% macro review_flags(flags) %}
+  {% set f = flags or '' %}
+  {% if 'name_below_threshold' in f or 'city_conflict' in f or 'margin_too_close' in f or 'national_name_only' in f %}
+  <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;">
+    {% if 'name_below_threshold' in f %}<span class="bw-flag-note">⚠ Name isn't a strong match — double-check it</span>{% endif %}
+    {% if 'city_conflict' in f %}<span class="bw-flag-note">⚠ Location doesn't match — confirm it's the same person</span>{% endif %}
+    {% if 'margin_too_close' in f %}<span class="bw-flag-note">⚠ Another candidate is nearly as strong — compare them</span>{% endif %}
+    {% if 'national_name_only' in f %}<span class="bw-flag-note">⚠ Out-of-state, name only — confirm role &amp; state</span>{% endif %}
+  </div>
   {% endif %}
 {% endmacro %}
 
@@ -82,18 +106,18 @@
   <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px;">
     <input type="text" name="q" value="{{ search }}" placeholder="Search by name…"
            aria-label="Search by name"
-           class="bw-input" style="width:220px;" maxlength="200">
-    <select name="state" aria-label="Filter by state" class="bw-select" style="width:140px;">
+           class="bw-input" style="flex:1;min-width:160px;" maxlength="200">
+    <select name="state" aria-label="Filter by state" class="bw-select" style="flex:1;min-width:110px;">
       <option value="all" {% if filter_state == 'all' %}selected{% endif %}>All states</option>
       {% for s in states %}<option value="{{ s }}" {% if filter_state == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
     </select>
-    <select name="sort" aria-label="Sort order" class="bw-select" style="width:170px;">
+    <select name="sort" aria-label="Sort order" class="bw-select" style="min-width:130px;">
       <option value="conf"  {% if sort == 'conf'  %}selected{% endif %}>Sort: Confidence</option>
       <option value="score" {% if sort == 'score' %}selected{% endif %}>Sort: Match Score</option>
       <option value="name"  {% if sort == 'name'  %}selected{% endif %}>Sort: Name A–Z</option>
       <option value="state" {% if sort == 'state' %}selected{% endif %}>Sort: State</option>
     </select>
-    <select name="per_page" id="filter-per-page" aria-label="Records per page" class="bw-select" style="width:130px;">
+    <select name="per_page" id="filter-per-page" aria-label="Records per page" class="bw-select" style="min-width:110px;">
       {% for n in [50, 100, 250] %}
         <option value="{{ n }}" {% if per_page == n %}selected{% endif %}>{{ n }} per page</option>
       {% endfor %}
@@ -101,8 +125,8 @@
       <option value="999999" {% if per_page == 999999 %}selected{% endif %}>Show all</option>
       {% endif %}
     </select>
-    <input type="hidden" name="conf" value="{{ filter_conf }}">
-    <input type="hidden" name="dec"  value="{{ filter_dec }}">
+    <input type="hidden" id="hf-conf" name="conf" value="{{ filter_conf }}">
+    <input type="hidden" id="hf-dec"  name="dec"  value="{{ filter_dec }}">
     <button type="submit" class="bw-btn bw-btn--primary bw-btn--sm">Apply</button>
     <a href="/professionals" class="text-muted" style="font-size:12px;">Reset</a>
   </div>
@@ -110,24 +134,39 @@
   {% set dec_labels  = {"all": "All", "PENDING": "Pending", "APPROVED": "Approved", "FLAGGED": "Flagged", "REJECTED": "No Match"} %}
   <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;">
     <div style="display:flex;align-items:center;gap:6px;">
-      <span class="bw-tip eyebrow" tabindex="0">Confidence
+      <span class="bw-tip eyebrow" tabindex="0" aria-describedby="tip-pro-conf">Confidence
         <span class="bw-tip__icon" aria-hidden="true">?</span>
-        <span role="tooltip" class="bw-tip__body">How closely the NPPES record matches the HHL record. HIGH = 4+ signals confirmed (name, address, phone, etc.). MEDIUM = 2–3 signals matched. LOW = 1 signal or weak name match only.</span>
+        <span role="tooltip" id="tip-pro-conf" class="bw-tip__body">How strong the match evidence is: HIGH = strong, MEDIUM = partial, LOW = weak. Every match still needs your confirmation.</span>
       </span>
       {% for c in ["all","HIGH","MEDIUM","LOW","NO_MATCH"] %}
-        <a href="/professionals?conf={{ c }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}"
-           class="bw-chip {% if filter_conf == c %}bw-chip--active{% endif %}">{{ conf_labels[c] }}</a>
+        <button type="submit"
+                class="bw-chip {% if filter_conf == c %}bw-chip--active{% endif %}"
+                {% if filter_conf == c %}aria-current="true"{% endif %}
+                onclick="document.getElementById('hf-conf').value='{{ c }}'">{{ conf_labels[c] }}</button>
       {% endfor %}
     </div>
     <div style="display:flex;align-items:center;gap:6px;">
       <span class="eyebrow">Decision</span>
       {% for d in ["all","PENDING","APPROVED","FLAGGED","REJECTED"] %}
-        <a href="/professionals?conf={{ filter_conf }}&dec={{ d }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}"
-           class="bw-chip {% if filter_dec == d %}bw-chip--active{% endif %}">{{ dec_labels[d] }}</a>
+        <button type="submit"
+                class="bw-chip {% if filter_dec == d %}bw-chip--active{% endif %}"
+                {% if filter_dec == d %}aria-current="true"{% endif %}
+                onclick="document.getElementById('hf-dec').value='{{ d }}'">{{ dec_labels[d] }}</button>
       {% endfor %}
     </div>
   </div>
 </form>
+
+{% if filter_conf != 'all' or filter_dec != 'all' or filter_state != 'all' or search %}
+<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:12px;padding:7px 12px;background:var(--bw-tertiary);border-radius:var(--bw-r-md);font-size:12px;color:var(--bw-brand-700);">
+  <span style="font-weight:600;">Filters:</span>
+  {% if filter_conf != 'all' %}<span style="background:var(--bw-brand-tint-20);color:var(--bw-brand-700);padding:1px 7px;border-radius:var(--bw-r-pill);font-size:11px;font-weight:600;">{{ conf_labels[filter_conf] }}</span>{% endif %}
+  {% if filter_dec != 'all' %}<span style="background:var(--bw-brand-tint-20);color:var(--bw-brand-700);padding:1px 7px;border-radius:var(--bw-r-pill);font-size:11px;font-weight:600;">{{ dec_labels[filter_dec] }}</span>{% endif %}
+  {% if filter_state != 'all' %}<span style="background:var(--bw-brand-tint-20);color:var(--bw-brand-700);padding:1px 7px;border-radius:var(--bw-r-pill);font-size:11px;font-weight:600;">{{ filter_state }}</span>{% endif %}
+  {% if search %}<span style="background:var(--bw-brand-tint-20);color:var(--bw-brand-700);padding:1px 7px;border-radius:var(--bw-r-pill);font-size:11px;font-weight:600;">"{{ search }}"</span>{% endif %}
+  <a href="/professionals" style="margin-left:auto;color:var(--bw-brand-700);text-decoration:none;font-size:11px;opacity:0.7;">Clear all ×</a>
+</div>
+{% endif %}
 
 {% if not items %}
   <div class="bw-card" style="padding:48px;text-align:center;">
@@ -136,6 +175,7 @@
   </div>
 {% endif %}
 
+<h2 class="sr-only">Review records</h2>
 {% for item in items %}
 {% set decided = item.decision %}
 {% set top = item.candidates[0] if item.candidates else none %}
@@ -196,10 +236,12 @@
               {{ cand.nppes_first_name }} {{ cand.nppes_last_name }}{% if cand.nppes_credential %}<span class="text-muted">, {{ cand.nppes_credential }}</span>{% endif %}
             </div>
             <div class="text-muted mono" style="font-size:12px;margin-top:2px;">{{ cand.nppes_npi }}{% if cand.nppes_taxonomy_code %} · {{ cand.nppes_taxonomy_code }}{% endif %}{% if 'perfect_name' in cand.confidence_flags %} <span style="font-family:var(--bw-font-body);color:var(--bw-success);">· exact name</span>{% endif %}</div>
+            {% if 'national' in (cand.signals_matched or '') %}<div style="margin-top:6px;">{{ national_badge(cand.signals_matched) }}</div>{% endif %}
+            {{ review_flags(cand.confidence_flags) }}
             {% if cand.nppes_address %}<div class="text-muted" style="font-size:12px;margin-top:2px;">{{ cand.nppes_address }}, {{ cand.nppes_city }}, {{ cand.nppes_state }} {{ cand.nppes_zip }}</div>{% endif %}
             {% if cand.signals_matched %}
             <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;">
-              {% for sig in cand.signals_matched.split('|') %}<span class="bw-signal">✓ {{ sig }}</span>{% endfor %}
+              {% for sig in cand.signals_matched.split('|') if sig != 'national' %}<span class="bw-signal">✓ {{ sig }}</span>{% endfor %}
             </div>
             {% endif %}
           </div>
@@ -250,7 +292,7 @@
     <form action="/decide/professional/{{ item.hhl_id }}" method="post" style="padding:12px 24px;border-top:1px solid var(--bw-rule);background:var(--bw-surface-subtle);display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
       <input type="hidden" name="back" value="/professionals?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&page={{ page }}">
       <input type="hidden" name="nppes_npi" value="">
-      <input type="text" name="notes" placeholder="Add a note (optional)…" aria-label="Notes" class="bw-input" style="flex:1;min-width:160px;padding:7px 10px;font-size:12px;" maxlength="500">
+      <input type="text" name="notes" placeholder="Add a note…" aria-label="Notes" class="bw-input" style="flex:1;min-width:160px;padding:7px 10px;font-size:12px;" maxlength="500">
       <button type="button" data-decision="FLAGGED"  class="bw-btn bw-btn--warn bw-btn--sm"   onclick="confirmDecision(this, event)">Flag</button>
       <button type="button" data-decision="REJECTED" class="bw-btn bw-btn--danger bw-btn--sm" onclick="confirmDecision(this, event)">No Match</button>
     </form>
@@ -274,12 +316,14 @@
             {% if best.nppes_credential %}<span class="text-muted" style="font-weight:400;">, {{ best.nppes_credential }}</span>{% endif %}
           </div>
           <div class="text-muted mono" style="font-size:12px;margin-top:3px;">{{ best.nppes_npi }}{% if 'perfect_name' in best.confidence_flags %} <span style="font-family:var(--bw-font-body);color:var(--bw-success);">· exact name</span>{% endif %}</div>
+          {% if 'national' in (best.signals_matched or '') %}<div style="margin-top:6px;">{{ national_badge(best.signals_matched) }}</div>{% endif %}
+          {{ review_flags(best.confidence_flags) }}
           {% if best.nppes_taxonomy_code %}
           <div class="text-muted" style="font-size:12px;margin-top:2px;display:flex;align-items:center;gap:4px;">
             <span class="mono">{{ best.nppes_taxonomy_code }}</span>
-            <span class="bw-tip" tabindex="0">
+            <span class="bw-tip" tabindex="0" aria-describedby="tip-tax-{{ item.hhl_id }}">
               <span class="bw-tip__icon" aria-hidden="true">?</span>
-              <span role="tooltip" class="bw-tip__body">Specialty code from the NUCC taxonomy. Identifies the provider's clinical area (e.g., 207K00000X = Allergy &amp; Immunology, 207R00000X = Internal Medicine). Verify this matches the specialty in the HHL record.</span>
+              <span role="tooltip" id="tip-tax-{{ item.hhl_id }}" class="bw-tip__body">Specialty code from the NUCC taxonomy. Identifies the provider's clinical area (e.g., 207K00000X = Allergy &amp; Immunology, 207R00000X = Internal Medicine). Verify this matches the specialty in the HHL record.</span>
             </span>
           </div>
           {% endif %}
@@ -287,13 +331,13 @@
           {% if best.nppes_phone %}<div class="text-muted" style="font-size:12px;">{{ best.nppes_phone }}</div>{% endif %}
           {% if best.signals_matched %}
           <div style="margin-top:8px;">
-            <span class="bw-tip" tabindex="0" style="display:inline-flex;align-items:center;margin-bottom:5px;">
+            <span class="bw-tip" tabindex="0" style="display:inline-flex;align-items:center;margin-bottom:5px;" aria-describedby="tip-sig-{{ item.hhl_id }}">
               <span style="font-size:11px;font-weight:700;color:var(--bw-muted);text-transform:uppercase;letter-spacing:0.06em;">Why this matched</span>
               <span class="bw-tip__icon" aria-hidden="true">?</span>
-              <span role="tooltip" class="bw-tip__body">Fields that matched between the HHL record and this NPPES provider. More matching signals = higher confidence the match is correct.</span>
+              <span role="tooltip" id="tip-sig-{{ item.hhl_id }}" class="bw-tip__body">Fields that matched between the HHL record and this NPPES provider. More matching signals = higher confidence the match is correct.</span>
             </span>
             <div style="display:flex;gap:4px;flex-wrap:wrap;">
-              {% for sig in best.signals_matched.split('|') %}<span class="bw-signal">✓ {{ sig }}</span>{% endfor %}
+              {% for sig in best.signals_matched.split('|') if sig != 'national' %}<span class="bw-signal">✓ {{ sig }}</span>{% endfor %}
             </div>
           </div>
           {% endif %}
@@ -322,12 +366,12 @@
       <form action="/decide/professional/{{ item.hhl_id }}" method="post" class="bw-action-bar">
         <input type="hidden" name="back" value="/professionals?conf={{ filter_conf }}&dec={{ filter_dec }}&state={{ filter_state }}&sort={{ sort }}&per_page={{ per_page }}&q={{ search }}&page={{ page }}">
         <input type="hidden" name="nppes_npi" value="{{ best.nppes_npi }}">
-        <input type="text" name="notes" placeholder="Add a note (optional)…" aria-label="Notes" class="bw-input" style="flex:1;min-width:160px;padding:7px 10px;font-size:12px;" maxlength="500">
+        <input type="text" name="notes" placeholder="Add a note…" aria-label="Notes" class="bw-input" style="flex:1;min-width:160px;padding:7px 10px;font-size:12px;" maxlength="500">
         <button type="button" data-decision="APPROVED" class="bw-btn bw-btn--success" onclick="confirmDecision(this, event)">✓ Confirm Match</button>
         <button type="button" data-decision="FLAGGED" data-npi="" class="bw-btn bw-btn--warn bw-btn--sm" onclick="confirmDecision(this, event)">Flag</button>
-        <span class="bw-tip" tabindex="0" style="display:inline-flex;align-items:center;margin-left:-2px;">
+        <span class="bw-tip" tabindex="0" style="display:inline-flex;align-items:center;margin-left:-2px;" aria-describedby="tip-flag-{{ item.hhl_id }}">
           <span class="bw-tip__icon" aria-hidden="true">?</span>
-          <span role="tooltip" class="bw-tip__body">Flag when you're unsure or want a second opinion. Use No Match when you're confident this provider isn't in NPPES.</span>
+          <span role="tooltip" id="tip-flag-{{ item.hhl_id }}" class="bw-tip__body">Flag when you're unsure or want a second opinion. Use No Match when you're confident this provider isn't in NPPES.</span>
         </span>
         <button type="button" data-decision="REJECTED" data-npi="" class="bw-btn bw-btn--danger bw-btn--sm" onclick="confirmDecision(this, event)">No Match</button>
       </form>
@@ -352,10 +396,12 @@
             {{ cand.nppes_first_name }} {{ cand.nppes_last_name }}{% if cand.nppes_credential %}<span class="text-muted">, {{ cand.nppes_credential }}</span>{% endif %}
           </div>
           <div class="text-muted mono" style="font-size:12px;margin-top:2px;">{{ cand.nppes_npi }}{% if cand.nppes_taxonomy_code %} · {{ cand.nppes_taxonomy_code }}{% endif %}</div>
+          {% if 'national' in (cand.signals_matched or '') %}<div style="margin-top:6px;">{{ national_badge(cand.signals_matched) }}</div>{% endif %}
+          {{ review_flags(cand.confidence_flags) }}
           {% if cand.nppes_address %}<div class="text-muted" style="font-size:12px;margin-top:2px;">{{ cand.nppes_address }}, {{ cand.nppes_city }}, {{ cand.nppes_state }} {{ cand.nppes_zip }}</div>{% endif %}
           {% if cand.signals_matched %}
           <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;">
-            {% for sig in cand.signals_matched.split('|') %}<span class="bw-signal">✓ {{ sig }}</span>{% endfor %}
+            {% for sig in cand.signals_matched.split('|') if sig != 'national' %}<span class="bw-signal">✓ {{ sig }}</span>{% endfor %}
           </div>
           {% endif %}
         </div>
@@ -415,6 +461,7 @@
         const npiInp = form.querySelector('input[name="nppes_npi"]');
         if (npiInp) npiInp.value = btn.dataset.npi;
       }
+      btn.disabled = true;
       form.submit();
       return;
     }
@@ -423,11 +470,22 @@
       const _form = btn.closest('form');
       const _notes = _form && _form.querySelector('input[name="notes"]');
       if (_notes && !_notes.value.trim()) {
-        alert('Please enter a note with the reason for this decision.');
+        let _err = _form.querySelector('.notes-validation-msg');
+        if (!_err) {
+          _err = document.createElement('span');
+          _err.className = 'notes-validation-msg';
+          _err.setAttribute('role', 'alert');
+          _err.style.cssText = 'font-size:12px;color:var(--bw-error);flex-basis:100%;';
+          _notes.insertAdjacentElement('afterend', _err);
+        }
+        _err.textContent = 'A note is required to flag or reject.';
         _notes.style.outline = '2px solid var(--bw-error)';
         _notes.style.outlineOffset = '2px';
         _notes.focus();
-        _notes.addEventListener('input', function() { _notes.style.outline = ''; }, {once: true});
+        _notes.addEventListener('input', function() {
+          _notes.style.outline = '';
+          if (_err) _err.textContent = '';
+        }, {once: true});
         return;
       }
     }
@@ -470,23 +528,6 @@
     }, 3000);
   }
 
-  // Sync live form state when a filter chip is clicked
-  document.querySelectorAll('a.bw-chip').forEach(function(chip) {
-    chip.addEventListener('click', function(e) {
-      e.preventDefault();
-      const url = new URL(chip.href);
-      const form = document.querySelector('form[action="/professionals"]');
-      if (!form) return;
-      const confInp = form.querySelector('input[name="conf"]');
-      const decInp  = form.querySelector('input[name="dec"]');
-      const newConf = url.searchParams.get('conf');
-      const newDec  = url.searchParams.get('dec');
-      if (confInp && newConf !== null) confInp.value = newConf;
-      if (decInp  && newDec  !== null) decInp.value  = newDec;
-      form.submit();
-    });
-  });
-
   // Guard "Show all" when record count is large — 2-step inline confirm (no window.confirm)
   (function () {
     const form = document.querySelector('form[action="/professionals"]');
@@ -517,6 +558,24 @@
       });
     }
   }());
+
+  // Notes character counters
+  document.querySelectorAll('input[name="notes"]').forEach(function(inp) {
+    var ctr = document.createElement('span');
+    ctr.className = 'text-muted';
+    ctr.style.cssText = 'font-size:12px;white-space:nowrap;flex-shrink:0;';
+    ctr.textContent = (inp.value.length || 0) + '/500';
+    inp.insertAdjacentElement('afterend', ctr);
+    inp.addEventListener('input', function() { ctr.textContent = inp.value.length + '/500'; });
+  });
+</script>
+
+<script>
+  window.RA_PAGE_RECORDS = [
+    {% for item in items %}
+      { id: {{ item.hhl_id|tojson }}, name: {{ item.meta.hhl_name|tojson }}, type: "professional", state: {{ (item.meta.hhl_state or "")|tojson }} }{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ];
 </script>
 
 {% endblock %}

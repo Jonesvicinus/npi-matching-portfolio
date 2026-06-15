@@ -326,6 +326,8 @@ def create_indexes(conn):
     conn.executescript("""
         CREATE INDEX IF NOT EXISTS idx_providers_state_type
             ON providers (practice_state, entity_type);
+        CREATE INDEX IF NOT EXISTS idx_providers_lastname
+            ON providers (last_name, entity_type);
         CREATE INDEX IF NOT EXISTS idx_taxonomies_npi
             ON taxonomies (npi);
         CREATE INDEX IF NOT EXISTS idx_other_names_npi

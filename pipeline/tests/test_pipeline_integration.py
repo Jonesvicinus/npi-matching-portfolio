@@ -83,14 +83,18 @@ class TestCenterTwoPass(unittest.TestCase):
     def _call(self, hhl_center, candidate_scores):
         """
         Run process_center with a fake state cache and controlled candidate scores.
-        candidate_scores: list of (name_score, source_str, row_dict)
+        candidate_scores: list of (name_score, source_str, row_dict). A 4th element
+        (keyword_match) is appended automatically to match score_against_entries,
+        which now returns (name_score, source, row, keyword_match).
         """
+        norm = [t if len(t) == 4 else (t[0], t[1], t[2], False) for t in candidate_scores]
         fake_cache = {
             "rows": [], "all_entries": [], "all_norm_names": [],
+            "all_scoring_names": [], "all_connector_names": [],
             "city_entries": {}, "zip_entries": {},
         }
         with patch.object(mmc, "get_state_cache", return_value=fake_cache), \
-             patch.object(mmc, "score_against_entries", return_value=candidate_scores):
+             patch.object(mmc, "score_against_entries", return_value=norm):
             return mmc.process_center(hhl_center)
 
     # --- Field completeness ---
@@ -107,6 +111,7 @@ class TestCenterTwoPass(unittest.TestCase):
     def test_output_fields_complete_on_no_match(self):
         fake_cache = {
             "rows": [], "all_entries": [], "all_norm_names": [],
+            "all_scoring_names": [], "all_connector_names": [],
             "city_entries": {}, "zip_entries": {},
         }
         with patch.object(mmc, "get_state_cache", return_value=fake_cache), \
@@ -127,6 +132,7 @@ class TestCenterTwoPass(unittest.TestCase):
     def test_no_match_v2_columns_blank(self):
         fake_cache = {
             "rows": [], "all_entries": [], "all_norm_names": [],
+            "all_scoring_names": [], "all_connector_names": [],
             "city_entries": {}, "zip_entries": {},
         }
         with patch.object(mmc, "get_state_cache", return_value=fake_cache), \
@@ -335,15 +341,15 @@ class TestProfessionalPhase1TwoPass(unittest.TestCase):
 
     # --- Two-pass: margin from BASE composites, same for all, bonus only on rank-1 ---
     #
-    # Physician, center city=Springfield
+    # Physician, center city=Springfield (weights: name .55 / city .25 / cred .10 / tax .10)
     # Row A  name=0.9, city=Springfield (match), cred=MD (match), tax="" (no match)
-    #   base_c = 0.9*0.50 + 1.0*0.20 + 1.0*0.15 + 0.0*0.15 = 0.800
+    #   base_c = 0.9*0.55 + 1.0*0.25 + 1.0*0.10 + 0.0*0.10 = 0.845
     # Row B  name=0.6, city=Chicago (no match), cred="" (no match), tax="" (no match)
-    #   base_c = 0.6*0.50 + 0.0*0.20 + 0.0*0.15 + 0.0*0.15 = 0.300
-    # margin_from_base  = 0.800 - 0.300 = 0.500  (is_unique: True)
-    # rank-1 final      = min(1.0, 0.800 + 0.05) = 0.850
-    # rank-2 final      = 0.300  (no bonus)
-    # margin_from_final = 0.850 - 0.300           = 0.550  (would be wrong)
+    #   base_c = 0.6*0.55 + 0.0*0.25 + 0.0*0.10 + 0.0*0.10 = 0.330
+    # margin_from_base  = 0.845 - 0.330 = 0.515  (is_unique: True)
+    # rank-1 final      = min(1.0, 0.845 + 0.05) = 0.895
+    # rank-2 final      = 0.330  (no bonus)
+    # margin_from_final = 0.895 - 0.330           = 0.565  (would be wrong)
 
     def _two_candidates(self):
         row_a = _ind_row("3333333333", "John", "Smith",
@@ -360,9 +366,9 @@ class TestProfessionalPhase1TwoPass(unittest.TestCase):
 
     def test_margin_is_from_base_composites(self):
         rows = self._two_candidates()
-        self.assertEqual(rows[0]["margin"], "0.500",
-                         "margin must be from base composites (0.800-0.300), "
-                         "not final composites (0.850-0.300=0.550)")
+        self.assertEqual(rows[0]["margin"], "0.515",
+                         "margin must be from base composites (0.845-0.330), "
+                         "not final composites (0.895-0.330=0.565)")
 
     def test_same_margin_for_all_candidates(self):
         rows = self._two_candidates()
@@ -370,9 +376,9 @@ class TestProfessionalPhase1TwoPass(unittest.TestCase):
 
     def test_uniqueness_bonus_only_on_rank1(self):
         rows = self._two_candidates()
-        self.assertEqual(rows[0]["match_score"], "0.850",
-                         "rank-1 should get +0.05 bonus (0.800+0.05)")
-        self.assertEqual(rows[1]["match_score"], "0.300",
+        self.assertEqual(rows[0]["match_score"], "0.895",
+                         "rank-1 should get +0.05 bonus (0.845+0.05)")
+        self.assertEqual(rows[1]["match_score"], "0.330",
                          "rank-2 must NOT receive the uniqueness bonus")
 
     def test_candidate_count_matches_candidates(self):
@@ -443,6 +449,8 @@ class TestProfessionalPhase2AnchorLogic(unittest.TestCase):
                           return_value=self._ANCHOR_LOC), \
              patch.object(mmp2, "get_individuals_at_location",
                           return_value=(all_rows, last_names)), \
+             patch.object(mmp2, "get_individuals_by_last_name_national",
+                          return_value=([], [])), \
              patch("match_professionals_phase2.fuzz_process") as mock_fp, \
              patch.object(mmp2, "score_individual", side_effect=mock_score):
             mock_fp.extract.return_value = extract_result
@@ -459,6 +467,8 @@ class TestProfessionalPhase2AnchorLogic(unittest.TestCase):
 
         with patch.object(mmp2, "get_state_individuals",
                           return_value=(all_rows, last_names)), \
+             patch.object(mmp2, "get_individuals_by_last_name_national",
+                          return_value=([], [])), \
              patch("match_professionals_phase2.fuzz_process") as mock_fp, \
              patch.object(mmp2, "score_individual", side_effect=mock_score):
             mock_fp.extract.return_value = extract_result
@@ -518,14 +528,14 @@ class TestProfessionalPhase2AnchorLogic(unittest.TestCase):
 
     def test_anchor_approved_match_score_reflects_city_credit(self):
         # name=0.9, city_val=1.0 (forced), cred=MD (match), tax="" (no match)
-        # base_c = 0.9*0.50 + 1.0*0.20 + 1.0*0.15 + 0.0*0.15 = 0.800 (single, no bonus)
+        # base_c = 0.9*0.55 + 1.0*0.25 + 1.0*0.10 + 0.0*0.10 = 0.845 (single, no bonus)
         row_a = _ind_row("7777777777", "John", "Smith", credential="MD",
                          taxonomy_code="", city="OtherCity")
         rows = self._call_anchored(
             _prof_hhl(), _center_lookup(), [(row_a, 0.9)],
             anchor_type="approved",
         )
-        self.assertEqual(rows[0]["match_score"], "0.800")
+        self.assertEqual(rows[0]["match_score"], "0.845")
 
     # --- anchor_inferred: normal city logic applies → city_conflict can fire ---
 
@@ -542,14 +552,14 @@ class TestProfessionalPhase2AnchorLogic(unittest.TestCase):
     def test_anchor_inferred_lower_score_than_approved(self):
         # anchor_inferred: city_val=0.0 (mismatch)
         # name=0.9, city_val=0.0, cred=MD (match), tax="" (no match)
-        # base_c = 0.9*0.50 + 0.0*0.20 + 1.0*0.15 + 0.0*0.15 = 0.600
+        # base_c = 0.9*0.55 + 0.0*0.25 + 1.0*0.10 + 0.0*0.10 = 0.595
         row_a = _ind_row("8888888888", "John", "Smith", credential="MD",
                          taxonomy_code="", city="OtherCity")
         rows = self._call_anchored(
             _prof_hhl(), _center_lookup(), [(row_a, 0.9)],
             anchor_type="inferred",
         )
-        self.assertEqual(rows[0]["match_score"], "0.600")
+        self.assertEqual(rows[0]["match_score"], "0.595")
 
     # --- anchor signal appended to ALL candidates ---
 
@@ -609,6 +619,215 @@ class TestProfessionalPhase2AnchorLogic(unittest.TestCase):
         rows = self._call_unanchored(_prof_hhl(), _center_lookup(), [(row_a, 0.9)])
         self.assertEqual(rows[0]["action"], "REVIEW")
         self.assertEqual(rows[0]["nppes_npi"], "7777777777")
+
+
+# ---------------------------------------------------------------------------
+# TestProfessionalNationalFallback
+#
+# When the in-state (and anchor) search yields no strong same-name candidate,
+# a national surname search across all states catches providers registered in a
+# different state than where HHL lists them (relocations, multi-state systems,
+# border cases). Real case: Shundrika Scott, listed at a TX center, is registered
+# in OK — invisible to the single-state search, while a wrong-first-name "Andrea
+# Scott" in TX scored 0.95.
+#
+# Design contract:
+#   - Trigger: best in-state name_score < NATIONAL_TRIGGER_THRESHOLD (0.85)
+#   - Merge:   only national candidates with name_score >= NATIONAL_MERGE_THRESHOLD
+#              (0.90) are injected — strong same-name matches only, not same-surname
+#              noise.
+#   - National-sourced candidates carry a "national" signal and never inherit the
+#     anchor signal or forced anchor-city credit.
+# ---------------------------------------------------------------------------
+
+class TestProfessionalNationalFallback(unittest.TestCase):
+
+    def setUp(self):
+        mmp2._state_cache.clear()
+        mmp2._loc_cache.clear()
+        mmp2._center_loc_cache.clear()
+        mmp2._center_approved.clear()
+        mmp2._center_high.clear()
+        if hasattr(mmp2, "_national_cache"):
+            mmp2._national_cache.clear()
+
+    def _call(self, prof, center_lookup, state_rows_scores, national_rows_scores):
+        """Unanchored run with controlled state + national candidate name scores."""
+        import contextlib
+        state_rows  = [r for r, _ in state_rows_scores]
+        state_last  = [(r["last_name"] or "").lower() for r in state_rows]
+        nat_rows    = [r for r, _ in national_rows_scores]
+        nat_last    = [(r["last_name"] or "").lower() for r in nat_rows]
+        scores      = {r["npi"]: s for r, s in (state_rows_scores + national_rows_scores)}
+
+        def mock_score(row, last_name, name_expansions):
+            return scores[row["npi"]]
+
+        nat_mock = unittest.mock.MagicMock(return_value=(nat_rows, nat_last))
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(patch.object(mmp2, "get_state_individuals",
+                                             return_value=(state_rows, state_last)))
+            stack.enter_context(patch.object(mmp2, "get_individuals_by_last_name_national",
+                                             nat_mock))
+            mock_fp = stack.enter_context(patch("match_professionals_phase2.fuzz_process"))
+            stack.enter_context(patch.object(mmp2, "score_individual", side_effect=mock_score))
+            mock_fp.extract.side_effect = (
+                lambda q, choices, **kw: [(None, 100, i) for i in range(len(choices))]
+            )
+            rows = mmp2.process_professional((prof, center_lookup))
+        return rows, nat_mock
+
+    def test_strong_national_match_outranks_weak_instate(self):
+        # In-state has only a wrong-first-name same-surname person (0.70).
+        # National has the exact-name person registered out of state (1.0).
+        instate = _ind_row("1111111111", "John", "Smith", credential="MD",
+                           city="Springfield", state="IL")
+        national = _ind_row("2222222222", "John", "Smith", credential="MD",
+                            city="Portland", state="OR")
+        rows, _ = self._call(
+            _prof_hhl(), _center_lookup(city=""),   # city_missing, as in the real case
+            state_rows_scores=[(instate, 0.70)],
+            national_rows_scores=[(national, 1.0)],
+        )
+        self.assertEqual(rows[0]["nppes_npi"], "2222222222")
+        self.assertIn("national", rows[0]["signals_matched"])
+
+    def test_weak_national_candidates_not_merged(self):
+        # National search returns only a same-surname different-person (0.80),
+        # below the merge bar (0.90) — it must NOT be injected.
+        instate = _ind_row("1111111111", "John", "Smith", credential="MD",
+                           city="Springfield", state="IL")
+        national = _ind_row("2222222222", "John", "Smith", credential="MD",
+                            city="Portland", state="OR")
+        rows, _ = self._call(
+            _prof_hhl(), _center_lookup(city=""),
+            state_rows_scores=[(instate, 0.70)],
+            national_rows_scores=[(national, 0.80)],
+        )
+        npis = {r["nppes_npi"] for r in rows}
+        self.assertNotIn("2222222222", npis)
+        self.assertEqual(rows[0]["nppes_npi"], "1111111111")
+
+    def test_ambiguous_national_matches_not_merged(self):
+        # Two strong same-name providers in different states cannot be told apart
+        # by name — surfacing either would be a guess, so neither is merged.
+        instate  = _ind_row("1111111111", "John", "Smith", credential="MD",
+                            city="Springfield", state="IL")
+        nat_a    = _ind_row("2222222222", "John", "Smith", credential="MD",
+                            city="Portland", state="OR")
+        nat_b    = _ind_row("3333333333", "John", "Smith", credential="MD",
+                            city="Austin", state="TX")
+        rows, _ = self._call(
+            _prof_hhl(), _center_lookup(city=""),
+            state_rows_scores=[(instate, 0.70)],
+            national_rows_scores=[(nat_a, 1.0), (nat_b, 0.97)],
+        )
+        npis = {r["nppes_npi"] for r in rows}
+        self.assertNotIn("2222222222", npis)
+        self.assertNotIn("3333333333", npis)
+        self.assertEqual(rows[0]["nppes_npi"], "1111111111")
+
+    def test_national_search_skipped_when_strong_instate_match(self):
+        # A strong in-state name match (0.97 >= trigger) means no national search.
+        instate = _ind_row("1111111111", "John", "Smith", credential="MD",
+                           city="Springfield", state="IL")
+        national = _ind_row("2222222222", "John", "Smith", credential="MD",
+                            city="Portland", state="OR")
+        rows, nat_mock = self._call(
+            _prof_hhl(), _center_lookup(),
+            state_rows_scores=[(instate, 0.97)],
+            national_rows_scores=[(national, 1.0)],
+        )
+        nat_mock.assert_not_called()
+        self.assertEqual(rows[0]["nppes_npi"], "1111111111")
+
+    def test_national_fallback_runs_when_no_instate_candidates(self):
+        national = _ind_row("2222222222", "John", "Smith", credential="MD",
+                            city="Portland", state="OR")
+        rows, nat_mock = self._call(
+            _prof_hhl(), _center_lookup(city=""),
+            state_rows_scores=[],
+            national_rows_scores=[(national, 1.0)],
+        )
+        nat_mock.assert_called()
+        self.assertEqual(rows[0]["nppes_npi"], "2222222222")
+        self.assertIn("national", rows[0]["signals_matched"])
+
+    def test_national_name_only_pick_capped_at_medium(self):
+        # An out-of-state pick with NO credential and NO taxonomy support has only
+        # the name to go on (and no city to verify) — it must not be labeled HIGH,
+        # or a reviewer could approve a coincidental namesake. Cap at MEDIUM + flag.
+        # (in-state credential blank so the margin is wide enough that the national
+        # pick would otherwise earn the uniqueness bonus and reach HIGH.)
+        instate  = _ind_row("1111111111", "John", "Smith", credential="",
+                            taxonomy_code="", city="Springfield", state="IL")
+        national = _ind_row("2222222222", "John", "Smith", credential="",
+                            taxonomy_code="", city="Portland", state="OR")
+        rows, _ = self._call(
+            _prof_hhl(prof_type="Physician"), _center_lookup(city=""),
+            state_rows_scores=[(instate, 0.70)],
+            national_rows_scores=[(national, 1.0)],
+        )
+        nat_row = next(r for r in rows if r["nppes_npi"] == "2222222222")
+        self.assertEqual(nat_row["rank"], 1)            # still surfaced as top
+        self.assertEqual(nat_row["confidence"], "MEDIUM")
+        self.assertIn("national_name_only", nat_row["confidence_flags"])
+
+    def test_national_pick_with_corroboration_can_be_high(self):
+        # Same as above but credential AND taxonomy align — corroborated, so HIGH
+        # is allowed (this is the Shundrika case: LCSW + social-worker taxonomy).
+        instate  = _ind_row("1111111111", "John", "Smith", credential="MD",
+                            city="Springfield", state="IL")
+        national = _ind_row("2222222222", "John", "Smith", credential="MD",
+                            taxonomy_code="207Q00000X", city="Portland", state="OR")
+        rows, _ = self._call(
+            _prof_hhl(prof_type="Physician"), _center_lookup(city=""),
+            state_rows_scores=[(instate, 0.70)],
+            national_rows_scores=[(national, 1.0)],
+        )
+        nat_row = next(r for r in rows if r["nppes_npi"] == "2222222222")
+        self.assertEqual(nat_row["confidence"], "HIGH")
+        self.assertNotIn("national_name_only", nat_row["confidence_flags"])
+
+    def test_national_candidate_does_not_inherit_anchor_signal(self):
+        # Center is anchor_approved but the person isn't at the anchor location;
+        # anchor + state are weak, national surfaces the real match. The national
+        # candidate must carry "national" and NOT "anchor_approved".
+        import contextlib
+        prof    = _prof_hhl()
+        cl      = _center_lookup()
+        mmp2._center_approved[prof["medical_center_id"]] = "5555555555"
+        anchor_loc = {"practice_state": "IL", "practice_city": "AnchorCity",
+                      "practice_zip": "11111"}
+        weak     = _ind_row("1111111111", "John", "Smith", credential="MD",
+                           city="AnchorCity", state="IL")
+        national = _ind_row("2222222222", "John", "Smith", credential="MD",
+                           city="Portland", state="OR")
+        scores   = {"1111111111": 0.50, "2222222222": 1.0}
+
+        def mock_score(row, last_name, name_expansions):
+            return scores[row["npi"]]
+
+        nat_mock = unittest.mock.MagicMock(return_value=([national], ["smith"]))
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(patch.object(mmp2, "get_center_location",
+                                             return_value=anchor_loc))
+            stack.enter_context(patch.object(mmp2, "get_individuals_at_location",
+                                             return_value=([weak], ["smith"])))
+            stack.enter_context(patch.object(mmp2, "get_state_individuals",
+                                             return_value=([weak], ["smith"])))
+            stack.enter_context(patch.object(mmp2, "get_individuals_by_last_name_national",
+                                             nat_mock))
+            mock_fp = stack.enter_context(patch("match_professionals_phase2.fuzz_process"))
+            stack.enter_context(patch.object(mmp2, "score_individual", side_effect=mock_score))
+            mock_fp.extract.side_effect = (
+                lambda q, choices, **kw: [(None, 100, i) for i in range(len(choices))]
+            )
+            rows = mmp2.process_professional((prof, cl))
+
+        nat_row = next(r for r in rows if r["nppes_npi"] == "2222222222")
+        self.assertIn("national", nat_row["signals_matched"])
+        self.assertNotIn("anchor_approved", nat_row["signals_matched"])
 
 
 if __name__ == "__main__":

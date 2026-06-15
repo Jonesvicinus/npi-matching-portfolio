@@ -12,7 +12,7 @@
 
 {% if not nppes %}
   <div class="bw-card" style="padding:32px;">
-    <p class="text-muted">NPI <span class="mono">{{ npi }}</span> not found in local database. Make sure <code>build_local_db.py</code> has been run.</p>
+    <p class="text-muted">Provider NPI <span class="mono">{{ npi }}</span> was not found. Contact your NPI Review administrator.</p>
   </div>
 {% else %}
 
@@ -32,7 +32,7 @@
       {% else %}<span class="bw-badge bw-badge--high">Active</span>{% endif %}
     </div>
   </div>
-  <button onclick="window.close(); return false;" class="bw-btn bw-btn--ghost bw-btn--sm">Close tab</button>
+  <button onclick="history.back(); return false;" class="bw-btn bw-btn--ghost bw-btn--sm">← Back</button>
 </div>
 
 {% if nppes.deactivation_date %}
@@ -291,7 +291,7 @@
   <div class="bw-card">
     <div class="bw-card__header">
       <h2>NPPES Data</h2>
-      <p class="text-muted" style="font-size:12px;margin-top:2px;">National Provider Identifier registry</p>
+      <p class="text-muted" style="font-size:12px;margin-top:2px;">National Provider Identifier Registry</p>
     </div>
     <div class="bw-card__body" style="padding-top:20px;">
       <dl style="display:grid;grid-template-columns:auto 1fr;gap:8px 16px;font-size:13px;align-items:baseline;">

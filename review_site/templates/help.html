@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Help & Glossary — NPI Review{% endblock %}
+{% block content %}
+
+<style>
+  .bw-help-term {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 16px;
+    padding: 14px 0;
+    border-top: 1px solid var(--bw-rule-subtle);
+    align-items: start;
+  }
+  .bw-help-term:first-child { border-top: none; }
+  .bw-help-term__name {
+    font-weight: 700;
+    color: var(--bw-secondary);
+    font-size: 13px;
+  }
+  .bw-help-term__def { font-size: 13px; color: var(--bw-ink-2); line-height: 1.55; }
+  .bw-help-term__def code {
+    font-family: var(--bw-font-mono);
+    font-size: 12px;
+    background: var(--bw-surface);
+    padding: 1px 5px;
+    border-radius: var(--bw-r-sm);
+  }
+  @media (max-width: 680px) {
+    .bw-help-term { grid-template-columns: 1fr; gap: 4px; }
+  }
+</style>
+
+<div class="bw-page-header">
+  <div>
+    <h1>Help &amp; Glossary</h1>
+    <p class="text-muted" style="font-size:13px;margin-top:4px;max-width:680px;">
+      Plain-English definitions of the terms you'll see while reviewing matches.
+      Every match needs your confirmation — the system never approves anything on
+      its own.
+    </p>
+  </div>
+</div>
+
+<!-- Core concepts -->
+<div class="bw-card" style="margin-bottom:24px;">
+  <div class="bw-card__header bw-card__header--teal"><h2>The Basics</h2></div>
+  <div class="bw-card__body">
+    <div class="bw-help-term"><div class="bw-help-term__name">NPI</div><div class="bw-help-term__def">National Provider Identifier — a unique 10-digit number the U.S. government assigns to every healthcare provider. The goal of this tool is to find the correct NPI for each HHL provider.</div></div>
+    <div class="bw-help-term"><div class="bw-help-term__name">NPPES</div><div class="bw-help-term__def">The federal registry (run by CMS) that lists every NPI and its provider's name, address, credential, and specialty. The "candidates" you review come from this registry.</div></div>
+    <div class="bw-help-term"><div class="bw-help-term__name">HHL record</div><div class="bw-help-term__def">The provider or medical center as it appears in Help Hope Live's own data — the thing we're trying to match to an official NPPES record.</div></div>
+    <div class="bw-help-term"><div class="bw-help-term__name">Candidate</div><div class="bw-help-term__def">A possible NPPES match the system found for an HHL record. Each record can have several candidates, ranked best-first. Your job is to confirm the right one (or none).</div></div>
+  </div>
+</div>
+
+<!-- Scores -->
+<div class="bw-card" style="margin-bottom:24px;">
+  <div class="bw-card__header bw-card__header--teal"><h2>How Matches Are Scored</h2></div>
+  <div class="bw-card__body">
+    <div class="bw-help-term"><div class="bw-help-term__name">Match score</div><div class="bw-help-term__def">A 0–1 number summarizing how closely a candidate resembles the HHL record across all signals. Higher is closer.</div></div>
+    <div class="bw-help-term"><div class="bw-help-term__name">Candidate strength</div><div class="bw-help-term__def"><span class="bw-badge bw-badge--strength-strong">STRONG</span> <span class="bw-badge bw-badge--strength-moderate">MODERATE</span> <span class="bw-badge bw-badge--strength-weak">WEAK</span> — how much evidence backs this candidate, based on the match score alone.</div></div>
+    <div class="bw-help-term"><div class="bw-help-term__name">Confidence</div><div class="bw-help-term__def">How strong the match evidence is — the label to act on. Every match still needs your confirmation, even HIGH:<div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;"><span><span class="bw-badge bw-badge--high">HIGH</span> &nbsp;Strong evidence — name plus confirming signals. Usually quick to verify.</span><span><span class="bw-badge bw-badge--medium">MEDIUM</span> &nbsp;Partial evidence — verify the details before confirming.</span><span><span class="bw-badge bw-badge--low">LOW</span> &nbsp;Weak or single-signal evidence — check carefully; often a reject.</span></div></div></div>
+    <div class="bw-help-term"><div class="bw-help-term__name">Strength vs. confidence</div><div class="bw-help-term__def">A candidate can be strong but not high-confidence — e.g. two equally good candidates make the <em>choice</em> uncertain even though each looks strong. Strength describes the candidate; confidence describes the decision.</div></div>
+  </div>
+</div>
+
+<!-- Signals -->
+<div class="bw-card" style="margin-bottom:24px;">
+  <div class="bw-card__header bw-card__header--teal"><h2>"Why This Matched" — Signals</h2></div>
+  <div class="bw-card__body">
+    <p class="text-muted" style="font-size:12px;margin-bottom:14px;">Each <span class="bw-signal">✓ signal</span> is one field that agreed between the HHL record and the NPPES candidate. More signals = more confidence.</p>
+    <div class="bw-help-term"><div class="bw-help-term__name">name</div><div class="bw-help-term__def">The provider/center name matched closely. <code>name_good</code> means a near match just below the strong-name bar.</div></div>
+    <div class="bw-help-term"><div class="bw-help-term__name">city / zip</div><div class="bw-help-term__def">The practice city or ZIP code matched.</div></div>
+    <div class="bw-help-term"><div class="bw-help-term__name">credential</div><div class="bw-help-term__def">The NPPES credential fits the HHL role (e.g. <code>LCSW</code> for a Social Worker, <code>MD</code> for a Physician).</div></div>
+    <div class="bw-help-term"><div class="bw-help-term__name">taxonomy</div><div class="bw-help-term__def">The NPPES specialty code (taxonomy) fits the HHL role. Taxonomy is the official NUCC specialty classification, e.g. <code>1041C0700X</code> = Clinical Social Worker.</div></div>
+    <div class="bw-help-term"><div class="bw-help-term__name">phone</div><div class="bw-help-term__def">The phone number matched exactly — a strong confirmation.</div></div>
+    <div class="bw-help-term"><div class="bw-help-term__name">unique</div><div class="bw-help-term__def">This candidate stood clearly ahead of the next-best one, with no close competitor.</div></div>
+    <div class="bw-help-term"><div class="bw-help-term__name">anchor</div><div class="bw-help-term__def">The search was narrowed to a confirmed medical center's location, which makes a professional match more precise.</div></div>
+  </div>
+</div>
+
+<!-- Badges & flags -->
+<div class="bw-card" style="margin-bottom:24px;">
+  <div class="bw-card__header bw-card__header--teal"><h2>Badges &amp; Flags</h2></div>
+  <div class="bw-card__body">
+    <div class="bw-help-term"><div class="bw-help-term__name"><span class="bw-badge--national"><span class="bw-badge__star" aria-hidden="true">★</span> National match</span></div><div class="bw-help-term__def">Rare and special. The system searched the entire country and found <strong>exactly one</strong> provider with this name — registered in a <strong>different state</strong> than the HHL record. It appears when no good match exists in the expected state (e.g. the provider moved, works for a multi-state system, or lives near a state border). Always confirm the state makes sense for this person.</div></div>
+    <div class="bw-help-term"><div class="bw-help-term__name"><span style="font-family:var(--bw-font-body);color:var(--bw-success);font-size:13px;">· exact name</span></div><div class="bw-help-term__def">The name matched perfectly, character-for-character.</div></div>
+    <div class="bw-help-term"><div class="bw-help-term__name"><code>national_name_only</code></div><div class="bw-help-term__def">A National match supported only by the name — the credential and specialty couldn't be confirmed, so it's capped at MEDIUM. Verify the role before approving.</div></div>
+    <div class="bw-help-term"><div class="bw-help-term__name"><code>city_conflict</code></div><div class="bw-help-term__def">The candidate's city disagrees with the HHL record. May still be right (people move), but check.</div></div>
+    <div class="bw-help-term"><div class="bw-help-term__name"><code>margin_too_close</code></div><div class="bw-help-term__def">Two candidates scored almost the same, so picking one over the other is uncertain. Compare them carefully.</div></div>
+    <div class="bw-help-term"><div class="bw-help-term__name"><code>sibling_location</code></div><div class="bw-help-term__def">An organization has more than one valid location/NPI. Both may be correct — record each NPI that applies.</div></div>
+    <div class="bw-help-term"><div class="bw-help-term__name">Placeholder entry</div><div class="bw-help-term__def">The HHL record is a generic placeholder (e.g. "Primary Physician") with no real name to match. Request more information from the patient.</div></div>
+  </div>
+</div>
+
+<!-- Actions -->
+<div class="bw-card">
+  <div class="bw-card__header bw-card__header--teal"><h2>Your Review Actions</h2></div>
+  <div class="bw-card__body">
+    <div class="bw-help-term"><div class="bw-help-term__name">Confirm / Approve</div><div class="bw-help-term__def">You agree this candidate is the correct match. Click once to arm (turns amber and asks "Confirm?"), click again to save — this prevents accidental approvals.</div></div>
+    <div class="bw-help-term"><div class="bw-help-term__name">Flag</div><div class="bw-help-term__def">Set the record aside for a second look or a question — neither approved nor rejected.</div></div>
+    <div class="bw-help-term"><div class="bw-help-term__name">No Match</div><div class="bw-help-term__def">None of the candidates is correct. Use this when the right provider simply isn't among the options.</div></div>
+    <div class="bw-help-term"><div class="bw-help-term__name">Mark Complete</div><div class="bw-help-term__def">For centers with multiple valid NPIs — finish the record after approving every location that applies.</div></div>
+    <div class="bw-help-term"><div class="bw-help-term__name">Compare</div><div class="bw-help-term__def">Opens a side-by-side view of the HHL record and a candidate so you can check the fields line up.</div></div>
+    <div class="bw-help-term"><div class="bw-help-term__name">Profile</div><div class="bw-help-term__def">Opens the full NPPES record for a candidate, including all addresses and specialties.</div></div>
+  </div>
+</div>
+
+{% endblock %}
